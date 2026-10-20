@@ -147,25 +147,36 @@ export function registerIpcHandlers(): void {
   // 5. Yorum Röntgeni & N-Gram (iOS ve Google Play Uyumlu)
   ipcMain.handle('review:get', async (_, appId: string, storefront = 'us') => {
     try {
+      const isAndroid = appId.startsWith('android:') || appId.includes('.') || !/^\d+$/.test(appId);
+      const targetAppId = isAndroid && !appId.startsWith('android:') ? `android:${appId}` : appId;
+
       let reviews = await prisma.review.findMany({
-        where: { appId },
+        where: { appId: targetAppId },
         orderBy: { reviewedAt: 'desc' },
         take: 200,
       });
 
       // Eğer veritabanında yoksa platformuna göre canlı çek ve kaydet
       if (reviews.length === 0) {
-        if (appId.startsWith('android:')) {
-          await fetchGPlayReviews(appId, storefront, 100);
+        if (isAndroid) {
+          const gReviews = await fetchGPlayReviews(targetAppId, storefront, 100);
+          reviews = await prisma.review.findMany({
+            where: { appId: targetAppId },
+            orderBy: { reviewedAt: 'desc' },
+            take: 200,
+          });
+          if (reviews.length === 0 && gReviews.length > 0) {
+            reviews = gReviews as any;
+          }
         } else {
-          const raw = await fetchAppReviews(appId, storefront, 5);
+          const raw = await fetchAppReviews(targetAppId, storefront, 5);
           for (const r of raw) {
             await prisma.review.upsert({
               where: { id: r.id },
               update: {},
               create: {
                 id: r.id,
-                appId,
+                appId: targetAppId,
                 platform: 'ios',
                 storefront,
                 rating: r.rating,
@@ -176,13 +187,15 @@ export function registerIpcHandlers(): void {
               },
             });
           }
+          reviews = await prisma.review.findMany({
+            where: { appId: targetAppId },
+            orderBy: { reviewedAt: 'desc' },
+            take: 200,
+          });
+          if (reviews.length === 0 && raw.length > 0) {
+            reviews = raw as any;
+          }
         }
-
-        reviews = await prisma.review.findMany({
-          where: { appId },
-          orderBy: { reviewedAt: 'desc' },
-          take: 200,
-        });
       }
 
       const reviewBodies = reviews.map(r => r.body);

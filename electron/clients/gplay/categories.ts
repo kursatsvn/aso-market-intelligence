@@ -50,7 +50,7 @@ export async function fetchGPlayTopCharts(
     num: Math.min(limit, 100),
     country: country.toLowerCase(),
     lang,
-    fullDetail: limit <= 50, // 50'ye kadar hızlı tam detay
+    fullDetail: true, // Puan ve yorum sayılarının 0 gözükmemesi için tam detay
   });
 
   if (!Array.isArray(results) || results.length === 0) {
@@ -88,7 +88,7 @@ export async function fetchGPlayTopCharts(
       sellerName: r.developer || '',
       iconUrl: r.icon || '',
       averageRating: Number((r.score || 0).toFixed(1)),
-      ratingCount: r.ratings || 0,
+      ratingCount: r.ratings || r.reviews || 0,
       installs: r.installs || '0+',
       minInstalls: r.minInstalls || 0,
       price: r.price || 0,

@@ -89,6 +89,8 @@ export default function Dashboard() {
   // Yorum Röntgeni
   const [selectedAppForReviews, setSelectedAppForReviews] = useState<any>(null);
   const [reviewData, setReviewData] = useState<any>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewCategoryFilter, setReviewCategoryFilter] = useState<'all' | 'pricing' | 'bug' | 'missingFeature'>('all');
 
   // İlk yüklemede verileri çek
@@ -265,11 +267,21 @@ export default function Dashboard() {
     setSelectedAppForReviews(app);
     setActiveTab('reviews');
     setReviewData(null);
+    setReviewLoading(true);
+    setReviewError(null);
 
     if (window.api) {
-      const res = await window.api.getAppReviews(app.id);
-      if (res?.success) {
-        setReviewData(res.data);
+      try {
+        const res = await window.api.getAppReviews(app.id, storefront);
+        if (res?.success) {
+          setReviewData(res.data);
+        } else {
+          setReviewError(res?.error || 'Yorumlar alınamadı');
+        }
+      } catch (err: any) {
+        setReviewError(err.message || 'Hata oluştu');
+      } finally {
+        setReviewLoading(false);
       }
     }
   };
@@ -1459,11 +1471,26 @@ export default function Dashboard() {
               </p>
             </div>
 
-            {reviewData && (
+            {reviewError && (
+              <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <span>{reviewError}</span>
+              </div>
+            )}
+
+            {reviewLoading && (
+              <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-16 text-center text-slate-400">
+                <RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-500 mb-3" />
+                <p className="text-sm font-semibold text-slate-300">Kullanıcı yorumları taranıyor...</p>
+                <p className="text-xs text-slate-500 mt-1">1-3 yıldızlı şikayetler ve n-gram öbekleri taranıyor</p>
+              </div>
+            )}
+
+            {!reviewLoading && reviewData && (
               <>
                 <div className="grid grid-cols-3 gap-4">
                   <div
-                    onClick={() => setReviewCategoryFilter('pricing')}
+                    onClick={() => setReviewCategoryFilter(reviewCategoryFilter === 'pricing' ? 'all' : 'pricing')}
                     className={`cursor-pointer rounded-2xl border p-4 transition-all ${
                       reviewCategoryFilter === 'pricing'
                         ? 'border-indigo-500 bg-indigo-500/10'
@@ -1476,7 +1503,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div
-                    onClick={() => setReviewCategoryFilter('bug')}
+                    onClick={() => setReviewCategoryFilter(reviewCategoryFilter === 'bug' ? 'all' : 'bug')}
                     className={`cursor-pointer rounded-2xl border p-4 transition-all ${
                       reviewCategoryFilter === 'bug'
                         ? 'border-red-500 bg-red-500/10'
@@ -1489,7 +1516,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div
-                    onClick={() => setReviewCategoryFilter('missingFeature')}
+                    onClick={() => setReviewCategoryFilter(reviewCategoryFilter === 'missingFeature' ? 'all' : 'missingFeature')}
                     className={`cursor-pointer rounded-2xl border p-4 transition-all ${
                       reviewCategoryFilter === 'missingFeature'
                         ? 'border-amber-500 bg-amber-500/10'
@@ -1525,26 +1552,43 @@ export default function Dashboard() {
                 )}
 
                 <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] p-5 space-y-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                    Kullanıcı Yorumları ({reviewData.reviews.length} Adet)
-                  </h3>
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                    {reviewData.reviews.map((r: any) => (
-                      <div key={r.id} className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-amber-400 font-bold">⭐ {r.rating} / 5</span>
-                          <span className="text-slate-500">{new Date(r.reviewedAt).toLocaleDateString()}</span>
-                        </div>
-                        {r.title && <h5 className="text-xs font-bold text-white mt-1">{r.title}</h5>}
-                        <p className="text-xs text-slate-300 mt-1 leading-relaxed">{r.body}</p>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Kullanıcı Yorumları ({reviewData.reviews.length} Adet)
+                    </h3>
+                    {reviewCategoryFilter !== 'all' && (
+                      <button
+                        onClick={() => setReviewCategoryFilter('all')}
+                        className="text-xs text-blue-400 hover:underline"
+                      >
+                        Filtreyi Temizle
+                      </button>
+                    )}
                   </div>
+                  {reviewData.reviews.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400">
+                      <p className="text-sm font-semibold text-slate-300">Bu uygulama için son dönemde 1-3 yıldızlı şikayet bulunamadı.</p>
+                      <p className="text-xs text-slate-500 mt-1">Uygulamanın yakın tarihli yorumlarının çoğu olumlu (4-5 yıldız) olabilir.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                      {reviewData.reviews.map((r: any) => (
+                        <div key={r.id} className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-amber-400 font-bold">⭐ {r.rating} / 5</span>
+                            <span className="text-slate-500">{new Date(r.reviewedAt).toLocaleDateString()}</span>
+                          </div>
+                          {r.title && <h5 className="text-xs font-bold text-white mt-1">{r.title}</h5>}
+                          <p className="text-xs text-slate-300 mt-1 leading-relaxed">{r.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </>
             )}
 
-            {!selectedAppForReviews && (
+            {!selectedAppForReviews && !reviewLoading && (
               <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-12 text-center text-slate-400">
                 <MessageSquare className="mx-auto h-12 w-12 text-slate-600 mb-3" />
                 <h3 className="text-base font-bold text-slate-300">Uygulama Seçilmedi</h3>
