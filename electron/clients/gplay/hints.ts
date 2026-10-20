@@ -27,8 +27,8 @@ export async function fetchGPlayHints(term: string, country = 'us', lang = 'en')
         priority: idx + 1,
       }));
     }
-  } catch (err) {
-    console.warn('gplay.suggest failed, trying Google suggest endpoint:', err);
+  } catch {
+    // gplay.suggest bazen null dondurebilir, yedek Google suggest endpointine gec
   }
 
   // Yedek (Fallback): Google suggest API
