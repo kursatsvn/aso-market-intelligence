@@ -44,6 +44,7 @@ interface ElectronApi {
   getCategoryTopCharts: (genreId: any, chartType: string, storefront?: string, limit?: number, platform?: string) => Promise<any>;
   getAppKeywords: (appId: string) => Promise<any>;
   checkAppKeywordRank: (appId: string, term: string, storefront?: string, platform?: string) => Promise<any>;
+  discoverAppKeywords: (appId: string, storefront?: string, platform?: string) => Promise<any>;
 }
 
 declare global {
@@ -108,6 +109,7 @@ export default function Dashboard() {
   const [storedAppsList, setStoredAppsList] = useState<any[]>([]);
   const [storedAppsLoading, setStoredAppsLoading] = useState(false);
   const [appSearchFilter, setAppSearchFilter] = useState('');
+  const [isDiscoveringKeywords, setIsDiscoveringKeywords] = useState(false);
 
   // İlk yüklemede verileri çek
   useEffect(() => {
@@ -314,12 +316,32 @@ export default function Dashboard() {
       try {
         const res = await window.api.getAppKeywords(app.id);
         if (res?.success) {
-          setAppKeywordsList(res.data.keywords || []);
+          const kwList = res.data.keywords || [];
+          setAppKeywordsList(kwList);
           if (res.data.app) {
             setSelectedAppForKeywords({
               ...app,
               ...res.data.app,
             });
+          }
+
+          // Eğer veritabanında henüz hiç kelime yoksa, arka planda otomatik keşfi başlat
+          if (kwList.length === 0) {
+            setIsDiscoveringKeywords(true);
+            const appStorefront = app.storefront || storefront || 'us';
+            const appPlatform = app.platform || platform || 'ios';
+            window.api.discoverAppKeywords(app.id, appStorefront, appPlatform)
+              .then((discRes: any) => {
+                if (discRes?.success && Array.isArray(discRes.data) && discRes.data.length > 0) {
+                  setAppKeywordsList(discRes.data);
+                  setRankCheckMessage({
+                    text: `✨ ASO Radar: Uygulamanın üst sıralarda yer aldığı ${discRes.data.length} anahtar kelime otomatik keşfedildi!`,
+                    type: 'success',
+                  });
+                }
+              })
+              .catch(console.error)
+              .finally(() => setIsDiscoveringKeywords(false));
           }
         } else {
           setAppKeywordsError(res?.error || 'Keyword sıralamaları alınamadı');
@@ -328,6 +350,43 @@ export default function Dashboard() {
         setAppKeywordsError(err.message || 'Hata oluştu');
       } finally {
         setAppKeywordsLoading(false);
+      }
+    }
+  };
+
+  const handleAutoDiscoverKeywords = async () => {
+    if (!selectedAppForKeywords) return;
+    setIsDiscoveringKeywords(true);
+    setRankCheckMessage(null);
+
+    if (window.api) {
+      try {
+        const appStorefront = selectedAppForKeywords.storefront || storefront || 'us';
+        const appPlatform = selectedAppForKeywords.platform || platform || 'ios';
+        const res = await window.api.discoverAppKeywords(
+          selectedAppForKeywords.id,
+          appStorefront,
+          appPlatform
+        );
+        if (res?.success && Array.isArray(res.data)) {
+          setAppKeywordsList(res.data);
+          setRankCheckMessage({
+            text: `✨ ASO Radar: Uygulamanın üst sıralarda yer aldığı ${res.data.length} anahtar kelime otomatik keşfedildi!`,
+            type: 'success',
+          });
+        } else {
+          setRankCheckMessage({
+            text: res?.error || 'Otomatik kelime keşfi sırasında bir sorun oluştu.',
+            type: 'warning',
+          });
+        }
+      } catch (err: any) {
+        setRankCheckMessage({
+          text: err.message || 'Hata oluştu',
+          type: 'error',
+        });
+      } finally {
+        setIsDiscoveringKeywords(false);
       }
     }
   };
@@ -1870,6 +1929,23 @@ export default function Dashboard() {
 
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={handleAutoDiscoverKeywords}
+                        disabled={isDiscoveringKeywords}
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                      >
+                        {isDiscoveringKeywords ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 animate-spin text-emerald-400" />
+                            <span>Kelimeler Keşfediliyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 text-emerald-400" />
+                            <span>✨ Üst Sıralardaki Kelimeleri Keşfet</span>
+                          </>
+                        )}
+                      </button>
+                      <button
                         onClick={() => handleOpenReviews(selectedAppForKeywords)}
                         className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3.5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5"
                       >
@@ -1991,11 +2067,28 @@ export default function Dashboard() {
                       <span>Sıralama verileri yükleniyor...</span>
                     </div>
                   ) : appKeywordsList.length === 0 ? (
-                    <div className="py-12 text-center text-slate-500 space-y-2">
+                    <div className="py-12 text-center text-slate-500 space-y-3">
                       <p className="text-sm">Henüz bu uygulama için taranmış bir anahtar kelime sıralaması bulunmuyor.</p>
-                      <p className="text-xs text-slate-600">
-                        Yukarıdaki arama çubuğunu kullanarak uygulamanın istediğiniz kelimelerdeki sırasını hemen test edebilirsiniz.
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        Tek tek kelime aratmanıza gerek yok! Aşağıdaki butona tıklayarak uygulamanın mağazada üst sıralarda yer aldığı tüm anahtar kelimeleri otomatik olarak tespit edebilirsiniz.
                       </p>
+                      <button
+                        onClick={handleAutoDiscoverKeywords}
+                        disabled={isDiscoveringKeywords}
+                        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-600/30 hover:opacity-90 transition-all disabled:opacity-50"
+                      >
+                        {isDiscoveringKeywords ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                            <span>Üst Sıralardaki Kelimeler Taranıyor...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />
+                            <span>✨ Üst Sıralardaki Kelimeleri Otomatik Keşfet</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">

@@ -6,6 +6,7 @@ import { calculateRisingStar } from '../../scoring/risingStar.js';
 import { extractNGrams, categorizeReview } from '../../text/ngram.js';
 import { fetchAppReviews } from '../clients/reviews.js';
 import { fetchGPlayReviews } from '../clients/gplay/reviews.js';
+import { discoverAppTopKeywords } from '../services/appKeywordDiscovery.js';
 import type { Platform } from '../../shared/platforms.js';
 
 export function registerIpcHandlers(): void {
@@ -307,7 +308,22 @@ export function registerIpcHandlers(): void {
         }
       }
 
-      const keywords = Array.from(keywordMap.values()).sort((a, b) => a.rank - b.rank);
+      let keywords = Array.from(keywordMap.values()).sort((a, b) => a.rank - b.rank);
+
+      // Eğer veritabanında henüz bu uygulama için keyword yoksa, otomatik olarak üst sıralardaki kelimeleri keşfet
+      if (keywords.length === 0) {
+        try {
+          const plat =
+            (app?.platform as Platform) ||
+            (appId.startsWith('android:') || appId.includes('.') ? 'android' : 'ios');
+          const discovered = await discoverAppTopKeywords(appId, 'us', plat);
+          if (discovered && discovered.length > 0) {
+            keywords = discovered;
+          }
+        } catch {
+          // ignore error in auto-discovery fallback
+        }
+      }
 
       return {
         success: true,
@@ -347,6 +363,19 @@ export function registerIpcHandlers(): void {
             day: new Date().toISOString().slice(0, 10),
           },
         };
+      } catch (err: any) {
+        return { success: false, error: err.message || String(err) };
+      }
+    }
+  );
+
+  // 9. Uygulamanın Üst Sıralarda Olduğu Kelimeleri Otomatik Keşfet (ASO Radar)
+  ipcMain.handle(
+    'app:discover-keywords',
+    async (_, appId: string, storefront = 'us', platform: Platform = 'ios') => {
+      try {
+        const keywords = await discoverAppTopKeywords(appId, storefront, platform);
+        return { success: true, data: keywords };
       } catch (err: any) {
         return { success: false, error: err.message || String(err) };
       }
