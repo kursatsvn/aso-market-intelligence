@@ -16,6 +16,8 @@ import {
   BarChart3,
   RefreshCw,
   Lightbulb,
+  Target,
+  ArrowRight,
 } from 'lucide-react';
 import {
   APP_CATEGORIES,
@@ -40,6 +42,8 @@ interface ElectronApi {
   getRisingStars: (platform?: string) => Promise<any>;
   getAppReviews: (appId: string, storefront?: string) => Promise<any>;
   getCategoryTopCharts: (genreId: any, chartType: string, storefront?: string, limit?: number, platform?: string) => Promise<any>;
+  getAppKeywords: (appId: string) => Promise<any>;
+  checkAppKeywordRank: (appId: string, term: string, storefront?: string, platform?: string) => Promise<any>;
 }
 
 declare global {
@@ -49,7 +53,7 @@ declare global {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'explorer' | 'categories' | 'stored' | 'suggestions' | 'rising' | 'reviews'>('explorer');
+  const [activeTab, setActiveTab] = useState<'explorer' | 'categories' | 'stored' | 'suggestions' | 'rising' | 'reviews' | 'appKeywords'>('explorer');
   const [platform, setPlatform] = useState<Platform>('ios');
   const [storedPlatformFilter, setStoredPlatformFilter] = useState<'all' | 'ios' | 'android'>('all');
   const [searchTerm, setSearchTerm] = useState('habit tracker');
@@ -92,6 +96,18 @@ export default function Dashboard() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewCategoryFilter, setReviewCategoryFilter] = useState<'all' | 'pricing' | 'bug' | 'missingFeature'>('all');
+
+  // Uygulama Keyword Sıralamaları (ASO App Rank Tracker)
+  const [selectedAppForKeywords, setSelectedAppForKeywords] = useState<any>(null);
+  const [appKeywordsList, setAppKeywordsList] = useState<any[]>([]);
+  const [appKeywordsLoading, setAppKeywordsLoading] = useState(false);
+  const [appKeywordsError, setAppKeywordsError] = useState<string | null>(null);
+  const [rankCheckTerm, setRankCheckTerm] = useState('');
+  const [rankCheckLoading, setRankCheckLoading] = useState(false);
+  const [rankCheckMessage, setRankCheckMessage] = useState<{ text: string; type: 'success' | 'warning' | 'error' } | null>(null);
+  const [storedAppsList, setStoredAppsList] = useState<any[]>([]);
+  const [storedAppsLoading, setStoredAppsLoading] = useState(false);
+  const [appSearchFilter, setAppSearchFilter] = useState('');
 
   // İlk yüklemede verileri çek
   useEffect(() => {
@@ -286,6 +302,123 @@ export default function Dashboard() {
     }
   };
 
+  const handleOpenAppKeywords = async (app: any) => {
+    setSelectedAppForKeywords(app);
+    setActiveTab('appKeywords');
+    setAppKeywordsLoading(true);
+    setAppKeywordsError(null);
+    setRankCheckMessage(null);
+    setRankCheckTerm('');
+
+    if (window.api) {
+      try {
+        const res = await window.api.getAppKeywords(app.id);
+        if (res?.success) {
+          setAppKeywordsList(res.data.keywords || []);
+          if (res.data.app) {
+            setSelectedAppForKeywords({
+              ...app,
+              ...res.data.app,
+            });
+          }
+        } else {
+          setAppKeywordsError(res?.error || 'Keyword sıralamaları alınamadı');
+        }
+      } catch (err: any) {
+        setAppKeywordsError(err.message || 'Hata oluştu');
+      } finally {
+        setAppKeywordsLoading(false);
+      }
+    }
+  };
+
+  const handleCheckAppKeywordRank = async (termToCheck = rankCheckTerm) => {
+    if (!selectedAppForKeywords || !termToCheck.trim()) return;
+    setRankCheckLoading(true);
+    setRankCheckMessage(null);
+
+    if (window.api) {
+      try {
+        const appStorefront = selectedAppForKeywords.storefront || storefront || 'us';
+        const appPlatform = selectedAppForKeywords.platform || platform || 'ios';
+        const res = await window.api.checkAppKeywordRank(
+          selectedAppForKeywords.id,
+          termToCheck.trim(),
+          appStorefront,
+          appPlatform
+        );
+
+        if (res?.success && res.data) {
+          const { rank, term, popularity, difficulty, opportunity, day } = res.data;
+          if (rank !== null) {
+            setRankCheckMessage({
+              text: `🎯 "${term}" kelimesinde #${rank}. sıradasınız!`,
+              type: 'success',
+            });
+            setAppKeywordsList((prev) => {
+              const exists = prev.some((k) => k.term.toLowerCase() === term.toLowerCase());
+              if (exists) {
+                return prev
+                  .map((k) =>
+                    k.term.toLowerCase() === term.toLowerCase()
+                      ? { ...k, rank, popularity, difficulty, opportunity, day }
+                      : k
+                  )
+                  .sort((a, b) => a.rank - b.rank);
+              }
+              return [
+                {
+                  term,
+                  rank,
+                  popularity,
+                  difficulty,
+                  opportunity,
+                  day,
+                  storefront: appStorefront,
+                  platform: appPlatform,
+                },
+                ...prev,
+              ].sort((a, b) => a.rank - b.rank);
+            });
+          } else {
+            setRankCheckMessage({
+              text: `ℹ️ "${term}" aramasında ilk 30 SERP sonucunda bulunamadı (>30).`,
+              type: 'warning',
+            });
+          }
+        } else {
+          setRankCheckMessage({
+            text: res?.error || 'Sıralama kontrol edilemedi',
+            type: 'error',
+          });
+        }
+      } catch (err: any) {
+        setRankCheckMessage({
+          text: err.message || 'Hata oluştu',
+          type: 'error',
+        });
+      } finally {
+        setRankCheckLoading(false);
+      }
+    }
+  };
+
+  const loadStoredAppsForSelector = async () => {
+    setStoredAppsLoading(true);
+    if (window.api) {
+      try {
+        const res = await window.api.getStoredApps();
+        if (res?.success) {
+          setStoredAppsList(res.data || []);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setStoredAppsLoading(false);
+      }
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#090d16] text-slate-100">
       {/* Üst Başlık & Menü */}
@@ -384,6 +517,27 @@ export default function Dashboard() {
           >
             <MessageSquare className="h-4 w-4" />
             Yorum Röntgeni
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('appKeywords');
+              if (!selectedAppForKeywords) {
+                loadStoredAppsForSelector();
+              }
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
+              activeTab === 'appKeywords'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Target className="h-4 w-4" />
+            Keyword Sıralamaları
+            {selectedAppForKeywords && (
+              <span className="ml-1 max-w-[90px] truncate text-[10px] bg-blue-700/60 px-1.5 py-0.5 rounded text-blue-200 font-normal">
+                {selectedAppForKeywords.name}
+              </span>
+            )}
           </button>
         </nav>
 
@@ -620,7 +774,14 @@ export default function Dashboard() {
                                 #{app.rank}
                               </td>
                               <td className="py-3.5 px-4 font-medium text-white max-w-xs truncate">
-                                {app.name}
+                                <button
+                                  onClick={() => handleOpenAppKeywords(app)}
+                                  className="text-left font-medium text-white hover:text-blue-400 max-w-xs truncate transition-colors flex items-center gap-1.5 group"
+                                  title="Bu uygulamanın keyword sıralamalarını gör"
+                                >
+                                  <span className="truncate">{app.name}</span>
+                                  <Target className="h-3 w-3 opacity-0 group-hover:opacity-100 text-blue-400 shrink-0 transition-opacity" />
+                                </button>
                               </td>
                               <td className="py-3.5 px-4">
                                 <div className="flex items-center gap-1.5 font-semibold text-amber-400">
@@ -649,7 +810,15 @@ export default function Dashboard() {
                                   </span>
                                 )}
                               </td>
-                              <td className="py-3.5 px-4 text-right">
+                              <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleOpenAppKeywords(app)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white transition-all"
+                                  title="Bu uygulamanın hangi aramalarda kaçıncı olduğunu gör"
+                                >
+                                  <Target className="h-3 w-3" />
+                                  Keyword Sıralamaları
+                                </button>
                                 <button
                                   onClick={() => handleOpenReviews(app)}
                                   className="inline-flex items-center gap-1 rounded-lg bg-blue-600/10 px-2.5 py-1 text-xs font-semibold text-blue-400 border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all"
@@ -981,7 +1150,14 @@ export default function Dashboard() {
                                 {app.iconUrl && (
                                   <img src={app.iconUrl} alt="" className="h-8 w-8 rounded-lg object-cover shrink-0" />
                                 )}
-                                <span className="truncate">{app.name}</span>
+                                <button
+                                  onClick={() => handleOpenAppKeywords(app)}
+                                  className="text-left font-medium text-white hover:text-blue-400 truncate transition-colors flex items-center gap-1.5 group"
+                                  title="Bu uygulamanın keyword sıralamalarını gör"
+                                >
+                                  <span className="truncate">{app.name}</span>
+                                  <Target className="h-3 w-3 opacity-0 group-hover:opacity-100 text-blue-400 shrink-0 transition-opacity" />
+                                </button>
                               </div>
                             </td>
                             <td className="py-3.5 px-4 text-slate-400 truncate max-w-[150px]">
@@ -1029,7 +1205,15 @@ export default function Dashboard() {
                                 </span>
                               )}
                             </td>
-                            <td className="py-3.5 px-4 text-right">
+                            <td className="py-3.5 px-4 text-right space-x-2 whitespace-nowrap">
+                              <button
+                                onClick={() => handleOpenAppKeywords(app)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white transition-all"
+                                title="Bu uygulamanın hangi aramalarda kaçıncı olduğunu gör"
+                              >
+                                <Target className="h-3 w-3" />
+                                Keyword Sıralamaları
+                              </button>
                               <button
                                 onClick={() => handleOpenReviews(app)}
                                 className="inline-flex items-center gap-1 rounded-lg bg-blue-600/10 px-2.5 py-1 text-xs font-semibold text-blue-400 border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all"
@@ -1600,6 +1784,383 @@ export default function Dashboard() {
                 <p className="mt-1 text-xs text-slate-500">
                   Explorer veya Kategori Sıralamaları sekmesinden bir uygulamanın "Yorumları Gör" butonuna tıklayın.
                 </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= TAB 7: UYGULAMA KEYWORD SIRALAMALARI (ASO APP RANK TRACKER) ================= */}
+        {activeTab === 'appKeywords' && (
+          <div className="mx-auto max-w-7xl space-y-6">
+            {/* Üst Başlık & Uygulama Değiştirici */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Target className="h-5 w-5 text-emerald-400" />
+                  Uygulama Keyword Sıralamaları (ASO Rank Tracker)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  {selectedAppForKeywords
+                    ? `"${selectedAppForKeywords.name}" uygulamasının hangi aramalarda kaçıncı sırada olduğunu takip edin.`
+                    : 'Kayıtlı uygulamalardan birini seçerek sıralandığı tüm anahtar kelimeleri inceleyin.'}
+                </p>
+              </div>
+
+              {selectedAppForKeywords && (
+                <button
+                  onClick={() => {
+                    setSelectedAppForKeywords(null);
+                    loadStoredAppsForSelector();
+                  }}
+                  className="self-start sm:self-auto text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700/60 transition-all flex items-center gap-1.5"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Farklı Bir Uygulama Seç
+                </button>
+              )}
+            </div>
+
+            {/* SEÇİLİ UYGULAMA KARTI & SIRALAMA METRİKLERİ */}
+            {selectedAppForKeywords ? (
+              <>
+                {/* Uygulama Profil Kartı */}
+                <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-4">
+                      {selectedAppForKeywords.iconUrl ? (
+                        <img
+                          src={selectedAppForKeywords.iconUrl}
+                          alt=""
+                          className="h-16 w-16 rounded-2xl object-cover border border-slate-700/60 shadow-md"
+                        />
+                      ) : (
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700 text-2xl">
+                          📱
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-white">{selectedAppForKeywords.name}</h3>
+                          {selectedAppForKeywords.platform === 'android' ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+                              🤖 Google Play
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
+                              🍏 App Store
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">{selectedAppForKeywords.sellerName}</p>
+                        <div className="mt-2 flex items-center gap-3 text-xs text-slate-300">
+                          <span className="font-semibold text-amber-400">
+                            ⭐ {(selectedAppForKeywords.averageRating || 0).toFixed(1)}
+                            <span className="text-slate-500 ml-1 font-normal">
+                              ({(selectedAppForKeywords.ratingCount || 0).toLocaleString()} yorum)
+                            </span>
+                          </span>
+                          {(selectedAppForKeywords.installs || (selectedAppForKeywords.ratingCount > 0 ? estimateIosInstalls(selectedAppForKeywords.ratingCount).formatted : undefined)) && (
+                            <span className="text-emerald-400 font-medium">
+                              ⬇️ {selectedAppForKeywords.installs || estimateIosInstalls(selectedAppForKeywords.ratingCount).formatted} indirme
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenReviews(selectedAppForKeywords)}
+                        className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3.5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5"
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        Yorum Röntgenini Aç
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sıralama İstatistikleri (KPIs) */}
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5 border-t border-slate-800/80 pt-4">
+                    <div className="rounded-xl bg-slate-900/60 border border-slate-800/80 p-3 text-center">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Sıralanan Kelime</span>
+                      <span className="text-xl font-mono font-bold text-white mt-1 block">
+                        {appKeywordsList.length}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-center">
+                      <span className="text-[10px] uppercase font-bold text-amber-400 block">🥇 #1 Sırada</span>
+                      <span className="text-xl font-mono font-bold text-amber-300 mt-1 block">
+                        {appKeywordsList.filter((k) => k.rank === 1).length}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-3 text-center">
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 block">🏆 İlk 3 (Top 3)</span>
+                      <span className="text-xl font-mono font-bold text-emerald-300 mt-1 block">
+                        {appKeywordsList.filter((k) => k.rank <= 3).length}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-3 text-center">
+                      <span className="text-[10px] uppercase font-bold text-blue-400 block">🎯 İlk 10 (Top 10)</span>
+                      <span className="text-xl font-mono font-bold text-blue-300 mt-1 block">
+                        {appKeywordsList.filter((k) => k.rank <= 10).length}
+                      </span>
+                    </div>
+                    <div className="rounded-xl bg-indigo-500/10 border border-indigo-500/20 p-3 text-center">
+                      <span className="text-[10px] uppercase font-bold text-indigo-400 block">📊 Ort. Sıralama</span>
+                      <span className="text-xl font-mono font-bold text-indigo-300 mt-1 block">
+                        {appKeywordsList.length > 0
+                          ? `#${(appKeywordsList.reduce((acc, k) => acc + k.rank, 0) / appKeywordsList.length).toFixed(1)}`
+                          : '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CANLI YENİ KELİMEDE SIRALAMA KONTROLÜ */}
+                <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] p-5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                    <Search className="h-4 w-4 text-blue-400" />
+                    Bu Uygulama İçin Yeni Kelimede Sıralama Kontrol Et
+                  </h4>
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleCheckAppKeywordRank();
+                    }}
+                    className="flex flex-col sm:flex-row gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={rankCheckTerm}
+                      onChange={(e) => setRankCheckTerm(e.target.value)}
+                      placeholder="Örn: habit tracker, budget planner, workout..."
+                      className="flex-1 rounded-xl border border-slate-700/80 bg-slate-900/90 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={rankCheckLoading || !rankCheckTerm.trim()}
+                      className="rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-5 py-2.5 text-xs font-bold text-white transition-all shadow-md shadow-blue-600/30 flex items-center justify-center gap-2 shrink-0"
+                    >
+                      {rankCheckLoading ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          SERP Taranıyor...
+                        </>
+                      ) : (
+                        <>
+                          <Target className="h-3.5 w-3.5" />
+                          Sıralamasını Sorgula
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  {/* Sonuç Bildirimi */}
+                  {rankCheckMessage && (
+                    <div
+                      className={`mt-3 rounded-xl p-3 text-xs font-medium border ${
+                        rankCheckMessage.type === 'success'
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                          : rankCheckMessage.type === 'warning'
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          : 'border-red-500/30 bg-red-500/10 text-red-300'
+                      }`}
+                    >
+                      {rankCheckMessage.text}
+                    </div>
+                  )}
+                </div>
+
+                {/* KEYWORD SIRALAMALARI TABLOSU */}
+                <div className="overflow-hidden rounded-2xl border border-slate-800/80 bg-[#0f172a] shadow-sm">
+                  <div className="border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Sıralandığı Anahtar Kelimeler</h3>
+                      <p className="text-xs text-slate-500">
+                        Bu uygulamanın ilk 30 arama sonucunda yer aldığı kelimeler
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md">
+                      {appKeywordsList.length} Kelime
+                    </span>
+                  </div>
+
+                  {appKeywordsLoading ? (
+                    <div className="py-12 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                      <RefreshCw className="h-6 w-6 animate-spin text-blue-400" />
+                      <span>Sıralama verileri yükleniyor...</span>
+                    </div>
+                  ) : appKeywordsList.length === 0 ? (
+                    <div className="py-12 text-center text-slate-500 space-y-2">
+                      <p className="text-sm">Henüz bu uygulama için taranmış bir anahtar kelime sıralaması bulunmuyor.</p>
+                      <p className="text-xs text-slate-600">
+                        Yukarıdaki arama çubuğunu kullanarak uygulamanın istediğiniz kelimelerdeki sırasını hemen test edebilirsiniz.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="border-b border-slate-800/80 bg-slate-900/60 font-medium text-slate-400">
+                          <tr>
+                            <th className="py-3 px-4 text-center">Sıralama</th>
+                            <th className="py-3 px-4">Anahtar Kelime</th>
+                            <th className="py-3 px-4">Popülerlik (Hacim)</th>
+                            <th className="py-3 px-4">Zorluk (KD)</th>
+                            <th className="py-3 px-4">Fırsat Skoru</th>
+                            <th className="py-3 px-4">Mağaza</th>
+                            <th className="py-3 px-4">Son Kontrol</th>
+                            <th className="py-3 px-4 text-right">İşlem</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {appKeywordsList.map((kw, idx) => {
+                            const isTop1 = kw.rank === 1;
+                            const isTop3 = kw.rank <= 3 && !isTop1;
+                            const isTop10 = kw.rank > 3 && kw.rank <= 10;
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                                <td className="py-3.5 px-4 text-center">
+                                  {isTop1 ? (
+                                    <span className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 px-2.5 py-1 font-mono font-extrabold text-amber-300 border border-amber-500/30 shadow-sm">
+                                      🥇 #1
+                                    </span>
+                                  ) : isTop3 ? (
+                                    <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/20 px-2.5 py-1 font-mono font-bold text-emerald-300 border border-emerald-500/30">
+                                      🏆 #{kw.rank}
+                                    </span>
+                                  ) : isTop10 ? (
+                                    <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/20 px-2.5 py-1 font-mono font-bold text-blue-300 border border-blue-500/30">
+                                      #{kw.rank}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 font-mono font-medium text-slate-400">
+                                      #{kw.rank}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 font-semibold text-white">
+                                  {kw.term}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono font-bold text-blue-400">
+                                      {kw.popularity}/100
+                                    </span>
+                                    <div className="h-1.5 w-16 rounded-full bg-slate-800 overflow-hidden">
+                                      <div
+                                        className="h-full bg-blue-500 rounded-full"
+                                        style={{ width: `${kw.popularity}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 font-mono font-bold text-amber-400">
+                                  {kw.difficulty}/100
+                                </td>
+                                <td className="py-3.5 px-4 font-mono font-bold text-emerald-400">
+                                  {typeof kw.opportunity === 'number' ? kw.opportunity.toFixed(0) : kw.opportunity}/100
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span className="uppercase text-slate-400 text-[11px] font-medium">
+                                    {kw.platform === 'android' ? '🤖' : '🍏'} {kw.storefront}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-slate-500">
+                                  {kw.day || '-'}
+                                </td>
+                                <td className="py-3.5 px-4 text-right">
+                                  <button
+                                    onClick={() => {
+                                      setSearchTerm(kw.term);
+                                      if (kw.storefront) setStorefront(kw.storefront);
+                                      if (kw.platform) setPlatform(kw.platform);
+                                      setActiveTab('explorer');
+                                      handleAnalyze(kw.term);
+                                    }}
+                                    className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
+                                  >
+                                    SERP İncele →
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* EĞER HENÜZ BİR UYGULAMA SEÇİLMEDİYSE: LİSTE VE ARAMA */
+              <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] p-6">
+                <div className="max-w-xl mx-auto text-center space-y-3 mb-8">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                    <Target className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-white">İncelemek İstediğiniz Uygulamayı Seçin</h3>
+                  <p className="text-xs text-slate-400">
+                    Keyword Explorer veya Kategori Sıralamaları tablolarından herhangi bir uygulamaya tıklayabilir ya da aşağıdaki kayıtlı uygulamalardan birini seçebilirsiniz.
+                  </p>
+                  <div className="pt-2">
+                    <input
+                      type="text"
+                      value={appSearchFilter}
+                      onChange={(e) => setAppSearchFilter(e.target.value)}
+                      placeholder="Kayıtlı uygulamalarda filtrele (Ad, geliştirici...)"
+                      className="w-full rounded-xl border border-slate-700/80 bg-slate-900/90 px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {storedAppsLoading ? (
+                  <div className="py-12 text-center text-slate-500 flex items-center justify-center gap-2">
+                    <RefreshCw className="h-5 w-5 animate-spin text-blue-400" />
+                    <span>Uygulamalar listeleniyor...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {storedAppsList
+                      .filter(
+                        (a) =>
+                          !appSearchFilter.trim() ||
+                          a.name.toLowerCase().includes(appSearchFilter.toLowerCase()) ||
+                          (a.sellerName && a.sellerName.toLowerCase().includes(appSearchFilter.toLowerCase()))
+                      )
+                      .slice(0, 30)
+                      .map((app) => (
+                        <div
+                          key={app.id}
+                          onClick={() => handleOpenAppKeywords(app)}
+                          className="flex items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-900/40 p-3 hover:border-blue-500/50 hover:bg-slate-800/50 cursor-pointer transition-all group"
+                        >
+                          {app.iconUrl ? (
+                            <img src={app.iconUrl} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-lg shrink-0">
+                              📱
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-blue-400 transition-colors">
+                              {app.name}
+                            </h4>
+                            <p className="text-[11px] text-slate-400 truncate">{app.sellerName || '-'}</p>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              ⭐ {(app.averageRating || 0).toFixed(1)} • {app.platform === 'android' ? '🤖' : '🍏'}
+                            </span>
+                          </div>
+                          <ArrowRight className="h-4 w-4 text-slate-600 group-hover:text-blue-400 shrink-0 transition-colors" />
+                        </div>
+                      ))}
+                    {storedAppsList.length === 0 && (
+                      <div className="col-span-full py-8 text-center text-xs text-slate-500">
+                        Henüz kayıtlı uygulama bulunamadı. Keyword Explorer'dan bir arama yaparak başlayabilirsiniz.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

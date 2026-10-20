@@ -8,6 +8,8 @@ export interface ElectronApi {
   getRisingStars: (platform?: string) => Promise<any[]>;
   getAppReviews: (appId: string, storefront?: string) => Promise<any>;
   getCategoryTopCharts: (genreId: any, chartType: string, storefront?: string, limit?: number, platform?: string) => Promise<any>;
+  getAppKeywords: (appId: string) => Promise<any>;
+  checkAppKeywordRank: (appId: string, term: string, storefront?: string, platform?: string) => Promise<any>;
 }
 
 const api: ElectronApi = {
@@ -24,6 +26,9 @@ const api: ElectronApi = {
   getAppReviews: (appId: string, storefront = 'us') => ipcRenderer.invoke('review:get', appId, storefront),
   getCategoryTopCharts: (genreId: any, chartType: string, storefront = 'us', limit = 200, platform = 'ios') =>
     ipcRenderer.invoke('category:top-charts', genreId, chartType, storefront, limit, platform),
+  getAppKeywords: (appId: string) => ipcRenderer.invoke('app:get-keywords', appId),
+  checkAppKeywordRank: (appId: string, term: string, storefront = 'us', platform = 'ios') =>
+    ipcRenderer.invoke('app:check-keyword-rank', appId, term, storefront, platform),
 };
 
 contextBridge.exposeInMainWorld('api', api);

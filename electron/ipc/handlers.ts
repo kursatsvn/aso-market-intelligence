@@ -260,4 +260,96 @@ export function registerIpcHandlers(): void {
       }
     }
   );
+
+  // 7. Bir Uygulamanın Sıralandığı Tüm Keywordler (App Keyword Rankings)
+  ipcMain.handle('app:get-keywords', async (_, appId: string) => {
+    try {
+      const cleanId = appId.replace('android:', '');
+      const possibleIds = [appId, cleanId, `android:${cleanId}`];
+
+      // Uygulama bilgilerini çek
+      const app = await prisma.app.findFirst({
+        where: { id: { in: possibleIds } },
+      });
+
+      // Bu uygulamanın yer aldığı tüm SERP kayıtlarını çek
+      const serpEntries = await prisma.serpEntry.findMany({
+        where: { appId: { in: possibleIds } },
+        include: {
+          keyword: {
+            include: {
+              metrics: {
+                orderBy: { day: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
+        orderBy: [{ day: 'desc' }, { rank: 'asc' }],
+      });
+
+      // Her keyword için en güncel sıralamayı tekilleştir
+      const keywordMap = new Map<number, any>();
+      for (const entry of serpEntries) {
+        if (!keywordMap.has(entry.keywordId)) {
+          const metric = entry.keyword.metrics[0];
+          keywordMap.set(entry.keywordId, {
+            id: entry.keyword.id,
+            term: entry.keyword.term,
+            storefront: entry.keyword.storefront,
+            platform: entry.keyword.platform,
+            rank: entry.rank,
+            day: entry.day,
+            popularity: metric?.popularity ?? 0,
+            difficulty: metric?.difficulty ?? 0,
+            opportunity: metric?.opportunity ?? 0,
+          });
+        }
+      }
+
+      const keywords = Array.from(keywordMap.values()).sort((a, b) => a.rank - b.rank);
+
+      return {
+        success: true,
+        data: {
+          app,
+          keywords,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // 8. Uygulamanın Belirli Bir Kelimedeki Sıralamasını Canlı Kontrol Et
+  ipcMain.handle(
+    'app:check-keyword-rank',
+    async (_, appId: string, term: string, storefront = 'us', platform: Platform = 'ios') => {
+      try {
+        const res = await analyzeKeyword(term, storefront, platform, false);
+        const cleanId = appId.replace('android:', '');
+        const possibleIds = [appId, cleanId, `android:${cleanId}`];
+
+        const foundApp = res.topApps.find(
+          a => possibleIds.includes(a.id) || possibleIds.includes(a.id.replace('android:', ''))
+        );
+
+        return {
+          success: true,
+          data: {
+            term: res.keyword,
+            storefront,
+            platform,
+            rank: foundApp ? foundApp.rank : null,
+            popularity: res.popularity,
+            difficulty: res.kd,
+            opportunity: res.opportunity.score,
+            day: new Date().toISOString().slice(0, 10),
+          },
+        };
+      } catch (err: any) {
+        return { success: false, error: err.message || String(err) };
+      }
+    }
+  );
 }
