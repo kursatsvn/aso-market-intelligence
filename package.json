@@ -30,6 +30,7 @@
     "cheerio": "^1.0.0",
     "clsx": "^2.1.1",
     "fast-xml-parser": "^5.0.8",
+    "google-play-scraper": "^10.1.4",
     "lucide-react": "^1.59.0",
     "next": "^16.4.2",
     "react": "^19.3.1",

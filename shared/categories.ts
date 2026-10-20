@@ -62,3 +62,36 @@ export const CHART_TYPES: ChartTypeConfig[] = [
   { key: 'topgrossingapplications', label: 'Top Grossing', labelTr: 'En Çok Hasılat Yapan (Ciro)' },
   { key: 'toppaidapplications', label: 'Top Paid', labelTr: 'Ücretli Uygulamalar' },
 ];
+
+export interface GPlayCategory {
+  id: string;
+  name: string;
+  nameTr: string;
+  icon: string;
+}
+
+export const GPLAY_CATEGORIES: GPlayCategory[] = [
+  { id: 'APPLICATION', name: 'All Apps', nameTr: 'Tüm Uygulamalar', icon: '🌐' },
+  { id: 'FINANCE', name: 'Finance', nameTr: 'Finans', icon: '💰' },
+  { id: 'PRODUCTIVITY', name: 'Productivity', nameTr: 'Verimlilik', icon: '⚡' },
+  { id: 'BUSINESS', name: 'Business', nameTr: 'İş', icon: '💼' },
+  { id: 'HEALTH_AND_FITNESS', name: 'Health & Fitness', nameTr: 'Sağlık ve Fitness', icon: '🏃' },
+  { id: 'EDUCATION', name: 'Education', nameTr: 'Eğitim', icon: '🎓' },
+  { id: 'TOOLS', name: 'Tools', nameTr: 'Araçlar', icon: '🛠️' },
+  { id: 'LIFESTYLE', name: 'Lifestyle', nameTr: 'Yaşam Tarzı', icon: '🌱' },
+  { id: 'PHOTOGRAPHY', name: 'Photography', nameTr: 'Fotoğrafçılık', icon: '📸' },
+  { id: 'ENTERTAINMENT', name: 'Entertainment', nameTr: 'Eğlence', icon: '🍿' },
+  { id: 'SOCIAL', name: 'Social', nameTr: 'Sosyal', icon: '💬' },
+  { id: 'MEDICAL', name: 'Medical', nameTr: 'Tıp', icon: '🩺' },
+  { id: 'MUSIC_AND_AUDIO', name: 'Music & Audio', nameTr: 'Müzik ve Ses', icon: '🎵' },
+  { id: 'SHOPPING', name: 'Shopping', nameTr: 'Alışveriş', icon: '🛍️' },
+  { id: 'TRAVEL_AND_LOCAL', name: 'Travel & Local', nameTr: 'Seyahat', icon: '✈️' },
+  { id: 'GAME', name: 'Games (All)', nameTr: 'Tüm Oyunlar', icon: '🎮' },
+  { id: 'GAME_ACTION', name: 'Action', nameTr: 'Aksiyon Oyunu', icon: '💥' },
+  { id: 'GAME_CASUAL', name: 'Casual', nameTr: 'Basit Eğlence', icon: '🎈' },
+  { id: 'GAME_PUZZLE', name: 'Puzzle', nameTr: 'Bulmaca Oyunu', icon: '🧩' },
+  { id: 'GAME_STRATEGY', name: 'Strategy', nameTr: 'Strateji Oyunu', icon: '♟️' },
+  { id: 'GAME_SIMULATION', name: 'Simulation', nameTr: 'Simülasyon Oyunu', icon: '🏗️' },
+  { id: 'GAME_ROLE_PLAYING', name: 'Role Playing', nameTr: 'Rol Yapma (RPG)', icon: '⚔️' },
+];
+

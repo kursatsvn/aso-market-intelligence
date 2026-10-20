@@ -22,18 +22,21 @@ import {
   CHART_TYPES,
   GAMES_CATEGORY_ID,
   GAME_SUBCATEGORIES,
+  GPLAY_CATEGORIES,
   isGameSubcategory,
   type AppCategory,
+  type GPlayCategory,
 } from '../shared/categories';
+import { PLATFORMS, type Platform } from '../shared/platforms';
 
 interface ElectronApi {
-  analyzeKeyword: (term: string, storefront?: string, pullReviews?: boolean) => Promise<any>;
+  analyzeKeyword: (term: string, storefront?: string, platform?: string | boolean, pullReviews?: boolean) => Promise<any>;
   getOpportunitySuggestions: (storefront?: string, seed?: string) => Promise<any>;
-  getStoredKeywords: () => Promise<any>;
-  getStoredApps: () => Promise<any>;
-  getRisingStars: () => Promise<any>;
-  getAppReviews: (appId: string) => Promise<any>;
-  getCategoryTopCharts: (genreId: number, chartType: string, storefront?: string, limit?: number) => Promise<any>;
+  getStoredKeywords: (platform?: string) => Promise<any>;
+  getStoredApps: (platform?: string) => Promise<any>;
+  getRisingStars: (platform?: string) => Promise<any>;
+  getAppReviews: (appId: string, storefront?: string) => Promise<any>;
+  getCategoryTopCharts: (genreId: any, chartType: string, storefront?: string, limit?: number, platform?: string) => Promise<any>;
 }
 
 declare global {
@@ -44,6 +47,8 @@ declare global {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'explorer' | 'categories' | 'stored' | 'suggestions' | 'rising' | 'reviews'>('explorer');
+  const [platform, setPlatform] = useState<Platform>('ios');
+  const [storedPlatformFilter, setStoredPlatformFilter] = useState<'all' | 'ios' | 'android'>('all');
   const [searchTerm, setSearchTerm] = useState('habit tracker');
   const [storefront, setStorefront] = useState('us');
   const [loading, setLoading] = useState(false);
@@ -53,7 +58,7 @@ export default function Dashboard() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
 
   // Kategori Sıralamaları (Top Charts)
-  const [selectedCategory, setSelectedCategory] = useState<number>(6013); // varsayılan: Sağlık ve Fitness
+  const [selectedCategory, setSelectedCategory] = useState<number | string>(6013); // iOS: 6013, Android: 'APPLICATION'
   const [selectedChartType, setSelectedChartType] = useState<string>('topfreeapplications');
   const [selectedLimit, setSelectedLimit] = useState<number>(200);
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
@@ -87,19 +92,37 @@ export default function Dashboard() {
   useEffect(() => {
     loadStoredKeywords();
     loadRisingStars();
-    loadCategoryTopCharts(selectedCategory, selectedChartType, storefront);
+    loadCategoryTopCharts(selectedCategory, selectedChartType, storefront, selectedLimit, platform);
   }, []);
 
-  const loadStoredKeywords = async () => {
+  const handleSwitchPlatform = (newPlat: Platform) => {
+    setPlatform(newPlat);
+    if (newPlat === 'android') {
+      setSelectedCategory('APPLICATION');
+      if (activeTab === 'categories') {
+        loadCategoryTopCharts('APPLICATION', selectedChartType, storefront, selectedLimit, 'android');
+      }
+    } else {
+      setSelectedCategory(6013);
+      if (activeTab === 'categories') {
+        loadCategoryTopCharts(6013, selectedChartType, storefront, selectedLimit, 'ios');
+      }
+    }
+    loadStoredKeywords();
+    loadRisingStars(newPlat);
+  };
+
+  const loadStoredKeywords = async (platFilter = storedPlatformFilter) => {
     if (window.api) {
-      const res = await window.api.getStoredKeywords();
+      const filterArg = platFilter === 'all' ? undefined : platFilter;
+      const res = await window.api.getStoredKeywords(filterArg);
       if (res?.success) setStoredKeywords(res.data);
     }
   };
 
-  const loadRisingStars = async () => {
+  const loadRisingStars = async (plat = platform) => {
     if (window.api) {
-      const res = await window.api.getRisingStars();
+      const res = await window.api.getRisingStars(plat);
       if (res?.success) setRisingStars(res.data);
     }
   };
@@ -127,7 +150,7 @@ export default function Dashboard() {
     if (!window.api || analyzingTerm || scanProgress) return;
     setAnalyzingTerm(term);
     try {
-      await window.api.analyzeKeyword(term, storefront, false);
+      await window.api.analyzeKeyword(term, storefront, platform, false);
       await loadStoredKeywords();
       await loadSuggestions();
     } finally {
@@ -142,7 +165,7 @@ export default function Dashboard() {
     for (let i = 0; i < targets.length; i++) {
       setScanProgress({ done: i, total: targets.length, current: targets[i] });
       try {
-        await window.api.analyzeKeyword(targets[i], storefront, false);
+        await window.api.analyzeKeyword(targets[i], storefront, platform, false);
       } catch {
         // Tek bir kelimedeki ağ hatası taramayı durdurmasın
       }
@@ -159,17 +182,18 @@ export default function Dashboard() {
   };
 
   const loadCategoryTopCharts = async (
-    genreId = selectedCategory,
+    genreId: any = selectedCategory,
     chartType = selectedChartType,
     sf = storefront,
-    limit = selectedLimit
+    limit = selectedLimit,
+    plat = platform
   ) => {
     setCategoryLoading(true);
     setCategoryError(null);
 
     if (window.api) {
       try {
-        const res = await window.api.getCategoryTopCharts(genreId, chartType, sf, limit);
+        const res = await window.api.getCategoryTopCharts(genreId, chartType, sf, limit, plat);
         if (res?.success) {
           setCategoryApps(res.data);
         } else {
@@ -219,7 +243,7 @@ export default function Dashboard() {
 
     if (window.api) {
       try {
-        const res = await window.api.analyzeKeyword(termToAnalyze.trim(), storefront);
+        const res = await window.api.analyzeKeyword(termToAnalyze.trim(), storefront, platform);
         if (res?.success) {
           setAnalysisResult(res.data);
           loadStoredKeywords();
@@ -348,28 +372,56 @@ export default function Dashboard() {
           </button>
         </nav>
 
-        {/* Storefront Seçimi */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Mağaza:</span>
-          <select
-            value={storefront}
-            onChange={(e) => {
-              const newSf = e.target.value;
-              setStorefront(newSf);
-              if (activeTab === 'categories') {
-                loadCategoryTopCharts(selectedCategory, selectedChartType, newSf);
-              }
-              if (activeTab === 'suggestions') {
-                loadSuggestions(newSf);
-              }
-            }}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 focus:border-blue-500 focus:outline-none"
-          >
-            <option value="us">🇺🇸 ABD (US)</option>
-            <option value="tr">🇹🇷 Türkiye (TR)</option>
-            <option value="gb">🇬🇧 Birleşik Krallık (GB)</option>
-            <option value="de">🇩🇪 Almanya (DE)</option>
-          </select>
+        {/* Platform & Storefront Seçimi */}
+        <div className="flex items-center gap-3">
+          {/* Store Switcher (iOS vs Android) */}
+          <div className="flex items-center rounded-xl bg-slate-900/90 p-1 border border-slate-800 shadow-inner">
+            <button
+              onClick={() => handleSwitchPlatform('ios')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                platform === 'ios'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span>🍏</span>
+              <span>App Store</span>
+            </button>
+            <button
+              onClick={() => handleSwitchPlatform('android')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                platform === 'android'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span>🤖</span>
+              <span>Google Play</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">Ülke:</span>
+            <select
+              value={storefront}
+              onChange={(e) => {
+                const newSf = e.target.value;
+                setStorefront(newSf);
+                if (activeTab === 'categories') {
+                  loadCategoryTopCharts(selectedCategory, selectedChartType, newSf, selectedLimit, platform);
+                }
+                if (activeTab === 'suggestions') {
+                  loadSuggestions(newSf);
+                }
+              }}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="us">🇺🇸 ABD (US)</option>
+              <option value="tr">🇹🇷 Türkiye (TR)</option>
+              <option value="gb">🇬🇧 Birleşik Krallık (GB)</option>
+              <option value="de">🇩🇪 Almanya (DE)</option>
+            </select>
+          </div>
         </div>
       </header>
 
@@ -386,17 +438,25 @@ export default function Dashboard() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-                  placeholder="App Store anahtar kelimesi yazın... (Örn: habit tracker, su içme, pomodoro)"
+                  placeholder={
+                    platform === 'android'
+                      ? 'Google Play anahtar kelimesi yazın... (Örn: borsa, kripto, finans, habit tracker)'
+                      : 'App Store anahtar kelimesi yazın... (Örn: habit tracker, su içme, pomodoro)'
+                  }
                   className="w-full rounded-2xl border border-slate-800 bg-[#0f172a] py-3.5 pl-12 pr-4 text-sm font-medium text-slate-100 placeholder-slate-500 shadow-inner focus:border-blue-500 focus:outline-none"
                 />
               </div>
               <button
                 onClick={() => handleAnalyze()}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/30 transition-all hover:bg-blue-500 disabled:opacity-50"
+                className={`flex items-center gap-2 rounded-2xl px-6 py-3.5 text-sm font-bold text-white shadow-lg transition-all disabled:opacity-50 ${
+                  platform === 'android'
+                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                    : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/30'
+                }`}
               >
                 {loading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-                {loading ? 'Analiz Ediliyor...' : 'Pazarı Analiz Et'}
+                {loading ? 'Analiz Ediliyor...' : `${platform === 'android' ? 'Play Store' : 'App Store'} Analiz Et`}
               </button>
             </div>
 
@@ -753,28 +813,48 @@ export default function Dashboard() {
 
                 {/* Kategori Seçim Butonları (Yatay Kaydırma) */}
                 <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-thin">
-                  {APP_CATEGORIES.map((cat: AppCategory) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => {
-                        setSelectedCategory(cat.id);
-                        loadCategoryTopCharts(cat.id, selectedChartType, storefront, selectedLimit);
-                      }}
-                      className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
-                        selectedCategory === cat.id ||
-                        (cat.id === GAMES_CATEGORY_ID && isGameSubcategory(selectedCategory))
-                          ? 'border border-blue-500 bg-blue-600/20 text-blue-300 shadow-sm'
-                          : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                      }`}
-                    >
-                      <span>{cat.icon}</span>
-                      <span>{cat.nameTr}</span>
-                    </button>
-                  ))}
+                  {platform === 'android' ? (
+                    GPLAY_CATEGORIES.map((cat: GPlayCategory) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategory(cat.id);
+                          loadCategoryTopCharts(cat.id, selectedChartType, storefront, selectedLimit, 'android');
+                        }}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
+                          selectedCategory === cat.id
+                            ? 'border border-emerald-500 bg-emerald-600/20 text-emerald-300 shadow-sm'
+                            : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.nameTr}</span>
+                      </button>
+                    ))
+                  ) : (
+                    APP_CATEGORIES.map((cat: AppCategory) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategory(cat.id);
+                          loadCategoryTopCharts(cat.id, selectedChartType, storefront, selectedLimit, 'ios');
+                        }}
+                        className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
+                          selectedCategory === cat.id ||
+                          (typeof selectedCategory === 'number' && cat.id === GAMES_CATEGORY_ID && isGameSubcategory(selectedCategory))
+                            ? 'border border-blue-500 bg-blue-600/20 text-blue-300 shadow-sm'
+                            : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.nameTr}</span>
+                      </button>
+                    ))
+                  )}
                 </div>
 
-                {/* Oyunlar Alt Kategorileri */}
-                {(selectedCategory === GAMES_CATEGORY_ID || isGameSubcategory(selectedCategory)) && (
+                {/* Oyunlar Alt Kategorileri (Yalnızca iOS için) */}
+                {platform === 'ios' && (selectedCategory === GAMES_CATEGORY_ID || (typeof selectedCategory === 'number' && isGameSubcategory(selectedCategory))) && (
                   <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-3">
                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       🎮 Oyun Türleri
@@ -788,7 +868,7 @@ export default function Dashboard() {
                           key={sub.id}
                           onClick={() => {
                             setSelectedCategory(sub.id);
-                            loadCategoryTopCharts(sub.id, selectedChartType, storefront, selectedLimit);
+                            loadCategoryTopCharts(sub.id, selectedChartType, storefront, selectedLimit, 'ios');
                           }}
                           className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                             selectedCategory === sub.id
@@ -809,7 +889,9 @@ export default function Dashboard() {
                 <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-16 text-center text-slate-400">
                   <RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-500 mb-3" />
                   <p className="text-sm font-semibold text-slate-300">{selectedLimit} uygulama canlı çekiliyor...</p>
-                  <p className="text-xs text-slate-500 mt-1">App Store liderleri ve fiyat/puan bilgileri taranıyor</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {platform === 'android' ? 'Google Play liderleri ve indirme/puan bilgileri taranıyor' : 'App Store liderleri ve fiyat/puan bilgileri taranıyor'}
+                  </p>
                 </div>
               ) : categoryError ? (
                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
@@ -860,6 +942,11 @@ export default function Dashboard() {
                                   ({app.ratingCount.toLocaleString()} yorum)
                                 </span>
                               </div>
+                              {app.installs && (
+                                <span className="mt-0.5 inline-block text-[10px] text-emerald-400 font-medium">
+                                  ⬇️ {app.installs} indirme
+                                </span>
+                              )}
                             </td>
                             <td className="py-3.5 px-4 text-slate-400">
                               {knownDate ? (
@@ -920,21 +1007,43 @@ export default function Dashboard() {
         {/* ================= TAB 3: KAYITLI KELİMELER ================= */}
         {activeTab === 'stored' && (
           <div className="mx-auto max-w-7xl space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-white">Veritabanındaki Kayıtlı Kelimeler</h2>
-                <p className="text-xs text-slate-400">Yerel SQLite tablonuzda biriken tüm analiz geçmişi</p>
+                <p className="text-xs text-slate-400">Yerel SQLite tablonuzda biriken tüm analiz geçmişi (iOS &amp; Google Play izole)</p>
               </div>
 
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={filterGoldOnly}
-                  onChange={(e) => setFilterGoldOnly(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
-                />
-                Sadece Fırsatları Göster (Pop&gt;30 &amp; KD&lt;40)
-              </label>
+              <div className="flex items-center gap-4">
+                {/* Platform Filtre Hapları */}
+                <div className="flex items-center rounded-xl bg-slate-900/80 p-1 border border-slate-800">
+                  {(['all', 'ios', 'android'] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setStoredPlatformFilter(p);
+                        loadStoredKeywords(p);
+                      }}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                        storedPlatformFilter === p
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {p === 'all' ? 'Tüm Mağazalar' : p === 'ios' ? '🍏 App Store' : '🤖 Google Play'}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={filterGoldOnly}
+                    onChange={(e) => setFilterGoldOnly(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-0"
+                  />
+                  Sadece Fırsatları Göster (Pop&gt;30 &amp; KD&lt;40)
+                </label>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] overflow-hidden">
@@ -942,7 +1051,8 @@ export default function Dashboard() {
                 <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
                   <tr>
                     <th className="py-3 px-4">Anahtar Kelime</th>
-                    <th className="py-3 px-4">Mağaza</th>
+                    <th className="py-3 px-4">Mağaza / Platform</th>
+                    <th className="py-3 px-4">Ülke</th>
                     <th className="py-3 px-4">Hacim (Pop)</th>
                     <th className="py-3 px-4">Zorluk (KD)</th>
                     <th className="py-3 px-4">Fırsat Skoru</th>
@@ -956,6 +1066,17 @@ export default function Dashboard() {
                     .map((kw) => (
                       <tr key={kw.id} className="hover:bg-slate-800/30">
                         <td className="py-3 px-4 font-semibold text-white">{kw.term}</td>
+                        <td className="py-3 px-4">
+                          {kw.platform === 'android' ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+                              🤖 Play Store
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-400 border border-blue-500/20">
+                              🍏 App Store
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 px-4 uppercase text-slate-400">{kw.storefront}</td>
                         <td className="py-3 px-4 font-mono font-bold text-blue-400">{kw.popularity}/100</td>
                         <td className="py-3 px-4 font-mono font-bold text-amber-400">{kw.difficulty}/100</td>
@@ -966,6 +1087,7 @@ export default function Dashboard() {
                             onClick={() => {
                               setSearchTerm(kw.term);
                               setStorefront(kw.storefront);
+                              if (kw.platform) setPlatform(kw.platform);
                               setActiveTab('explorer');
                               handleAnalyze(kw.term);
                             }}
@@ -978,8 +1100,8 @@ export default function Dashboard() {
                     ))}
                   {storedKeywords.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500">
-                        Henüz veritabanında kayıtlı kelime yok. Explorer sekmesinden ilk aramanızı yapın!
+                      <td colSpan={8} className="py-8 text-center text-slate-500">
+                        Henüz bu filtreye uygun kayıtlı kelime yok. Explorer sekmesinden ilk aramanızı yapın!
                       </td>
                     </tr>
                   )}

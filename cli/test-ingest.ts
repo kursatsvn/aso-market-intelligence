@@ -3,14 +3,15 @@ import { analyzeKeyword } from '../electron/services/keywordPipeline.js';
 async function main() {
   const keyword = process.argv[2] || 'habit tracker';
   const storefront = process.argv[3] || 'us';
+  const platform = (process.argv[4] as 'ios' | 'android') || 'ios';
 
   console.log(`\n======================================================`);
-  console.log(`🔍 ASO & Pazar İstihbaratı: "${keyword.toUpperCase()}" (${storefront.toUpperCase()})`);
+  console.log(`🔍 ASO & Pazar İstihbaratı: "${keyword.toUpperCase()}" (${storefront.toUpperCase()} - ${platform.toUpperCase()})`);
   console.log(`======================================================\n`);
-  console.log(`[1/5] Gerçek App Store SERP çekiliyor...`);
+  console.log(`[1/5] Gerçek ${platform === 'android' ? 'Google Play' : 'App Store'} SERP çekiliyor...`);
 
   const startTime = Date.now();
-  const res = await analyzeKeyword(keyword, storefront, true);
+  const res = await analyzeKeyword(keyword, storefront, platform, true);
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
   console.log(`\n📊 SKORLAMA ÖZETİ (${elapsed} saniyede tamamlandı):`);
