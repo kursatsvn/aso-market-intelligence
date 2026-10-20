@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./aso.db"
+}
+
+// 1. İncelenen veya Takip Edilen Uygulamalar
+model App {
+  id             String    @id // Apple trackId (String formatında)
+  name           String
+  bundleId       String?
+  sellerName     String?
+  primaryGenreId Int?
+  releaseDate    DateTime?
+  lastUpdated    DateTime?
+  version        String?
+  price          Float     @default(0)
+  currency       String    @default("USD")
+  averageRating  Float     @default(0)
+  ratingCount    Int       @default(0)
+  iconUrl        String?
+  isTracked      Boolean   @default(false)
+  hasIap         Boolean   @default(false)
+  iapCheckedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  snapshots      AppSnapshot[]
+  reviews        Review[]
+  serpEntries    SerpEntry[]
+
+  @@index([isTracked])
+  @@index([releaseDate])
+  @@map("app")
+}
+
+// 2. Günlük Uygulama Metrikleri (Zaman Serisi & Hız Takibi)
+model AppSnapshot {
+  id          Int      @id @default(autoincrement())
+  appId       String
+  day         String   // 'YYYY-MM-DD' UTC
+  ratingCount Int
+  avgRating   Float
+  capturedAt  DateTime @default(now())
+
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, day])
+  @@index([day])
+  @@map("app_snapshot")
+}
+
+// 3. Anahtar Kelimeler
+model Keyword {
+  id          Int      @id @default(autoincrement())
+  term        String   // Küçük harf, normalize edilmiş
+  storefront  String   @default("us")
+  createdAt   DateTime @default(now())
+
+  metrics     KeywordMetric[]
+  serpEntries SerpEntry[]
+
+  @@unique([term, storefront])
+  @@index([term])
+  @@map("keyword")
+}
+
+// 4. Günlük Keyword Skorları
+model KeywordMetric {
+  id            Int      @id @default(autoincrement())
+  keywordId     Int
+  day           String   // 'YYYY-MM-DD' UTC
+  popularity    Int      // 5 - 100
+  popularitySrc String   @default("proxy") // 'asa' veya 'proxy'
+  difficulty    Int      // 1 - 100 (KD)
+  opportunity   Float    // 0 - 100 (Fırsat Skoru)
+  capturedAt    DateTime @default(now())
+
+  keyword       Keyword  @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@unique([keywordId, day])
+  @@index([day, opportunity])
+  @@map("keyword_metric")
+}
+
+// 5. SERP Sıralama Geçmişi
+model SerpEntry {
+  id         Int      @id @default(autoincrement())
+  keywordId  Int
+  appId      String
+  rank       Int      // 1..20
+  day        String   // 'YYYY-MM-DD' UTC
+
+  keyword    Keyword  @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  app        App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([keywordId, appId, day])
+  @@index([keywordId, day, rank])
+  @@index([appId, day])
+  @@map("serp_entry")
+}
+
+// 6. Düşük Puanlı Kullanıcı Yorumları (1 - 3 Yıldız)
+model Review {
+  id          String   @id // Apple review ID
+  appId       String
+  storefront  String   @default("us")
+  rating      Int      // 1..3
+  title       String?
+  body        String
+  reviewedAt  DateTime
+  appVersion  String?
+  fetchedAt   DateTime @default(now())
+
+  app         App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@index([appId, rating])
+  @@index([appId, reviewedAt])
+  @@map("review")
+}
+
+// 7. Uygulama Ayarları & Oturum Verileri
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  @@map("setting")
+}

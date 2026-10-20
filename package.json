@@ -1,0 +1,56 @@
+{
+  "name": "aso-market-intelligence",
+  "version": "1.0.0",
+  "description": "Zero-LLM Local-First ASO & Market Intelligence Engine",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev:next": "next dev",
+    "dev:electron": "tsc -p tsconfig.electron.json && cross-env NODE_ENV=development electron .",
+    "dev": "concurrently -k -p \"[{name}]\" -n \"NEXT,ELECTRON\" -c \"cyan,magenta\" \"next dev\" \"tsc -p tsconfig.electron.json --watch\" \"cross-env NODE_ENV=development electron .\"",
+    "build:ui": "next build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "npm run build:ui && npm run build:electron",
+    "start": "cross-env NODE_ENV=production electron .",
+    "test:ingest": "tsx cli/test-ingest.ts",
+    "test:rising": "tsx cli/test-rising.ts",
+    "test": "vitest run",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
+  },
+  "keywords": [
+    "aso",
+    "appstore",
+    "market-intelligence"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^6.4.0",
+    "better-sqlite3": "^11.8.1",
+    "cheerio": "^1.0.0",
+    "clsx": "^2.1.1",
+    "fast-xml-parser": "^5.0.8",
+    "lucide-react": "^1.59.0",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.6.1",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^44.9.0",
+    "postcss": "^8.5.31",
+    "prisma": "^6.4.0",
+    "tailwindcss": "^3.4.19",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
