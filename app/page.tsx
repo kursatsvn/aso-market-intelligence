@@ -15,11 +15,20 @@ import {
   XCircle,
   BarChart3,
   RefreshCw,
+  Lightbulb,
 } from 'lucide-react';
-import { APP_CATEGORIES, CHART_TYPES, type AppCategory } from '../shared/categories';
+import {
+  APP_CATEGORIES,
+  CHART_TYPES,
+  GAMES_CATEGORY_ID,
+  GAME_SUBCATEGORIES,
+  isGameSubcategory,
+  type AppCategory,
+} from '../shared/categories';
 
 interface ElectronApi {
-  analyzeKeyword: (term: string, storefront?: string) => Promise<any>;
+  analyzeKeyword: (term: string, storefront?: string, pullReviews?: boolean) => Promise<any>;
+  getOpportunitySuggestions: (storefront?: string, seed?: string) => Promise<any>;
   getStoredKeywords: () => Promise<any>;
   getStoredApps: () => Promise<any>;
   getRisingStars: () => Promise<any>;
@@ -34,7 +43,7 @@ declare global {
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<'explorer' | 'categories' | 'stored' | 'rising' | 'reviews'>('explorer');
+  const [activeTab, setActiveTab] = useState<'explorer' | 'categories' | 'stored' | 'suggestions' | 'rising' | 'reviews'>('explorer');
   const [searchTerm, setSearchTerm] = useState('habit tracker');
   const [storefront, setStorefront] = useState('us');
   const [loading, setLoading] = useState(false);
@@ -51,6 +60,8 @@ export default function Dashboard() {
   const [categoryApps, setCategoryApps] = useState<any[]>([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [ageFilterDays, setAgeFilterDays] = useState<number | null>(null); // null = tümü
+  const [categorySort, setCategorySort] = useState<'rank' | 'newest' | 'oldest'>('rank');
 
   // Kayıtlı Kelimeler
   const [storedKeywords, setStoredKeywords] = useState<any[]>([]);
@@ -58,6 +69,14 @@ export default function Dashboard() {
 
   // Rising Stars
   const [risingStars, setRisingStars] = useState<any[]>([]);
+
+  // Fırsat Önerileri
+  const [suggestions, setSuggestions] = useState<any>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [customSeed, setCustomSeed] = useState('');
+  const [analyzingTerm, setAnalyzingTerm] = useState<string | null>(null);
+  const [scanProgress, setScanProgress] = useState<{ done: number; total: number; current: string } | null>(null);
 
   // Yorum Röntgeni
   const [selectedAppForReviews, setSelectedAppForReviews] = useState<any>(null);
@@ -83,6 +102,60 @@ export default function Dashboard() {
       const res = await window.api.getRisingStars();
       if (res?.success) setRisingStars(res.data);
     }
+  };
+
+  const loadSuggestions = async (sf = storefront, seed = customSeed) => {
+    if (!window.api) return;
+    setSuggestLoading(true);
+    setSuggestError(null);
+    try {
+      const res = await window.api.getOpportunitySuggestions(sf, seed.trim() || undefined);
+      if (res?.success) {
+        setSuggestions(res.data);
+      } else {
+        setSuggestError(res?.error || 'Öneriler alınamadı');
+      }
+    } catch (err: any) {
+      setSuggestError(err.message || 'Hata oluştu');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  // Tek bir adayı hızlıca (yorum indirmeden) analiz edip listeyi tazeler
+  const analyzeCandidate = async (term: string) => {
+    if (!window.api || analyzingTerm || scanProgress) return;
+    setAnalyzingTerm(term);
+    try {
+      await window.api.analyzeKeyword(term, storefront, false);
+      await loadStoredKeywords();
+      await loadSuggestions();
+    } finally {
+      setAnalyzingTerm(null);
+    }
+  };
+
+  // En yüksek tahmini skorlu ilk N adayı sırayla analiz eder
+  const scanTopCandidates = async (count = 8) => {
+    if (!window.api || scanProgress || analyzingTerm || !suggestions?.candidates?.length) return;
+    const targets: string[] = suggestions.candidates.slice(0, count).map((c: any) => c.term);
+    for (let i = 0; i < targets.length; i++) {
+      setScanProgress({ done: i, total: targets.length, current: targets[i] });
+      try {
+        await window.api.analyzeKeyword(targets[i], storefront, false);
+      } catch {
+        // Tek bir kelimedeki ağ hatası taramayı durdurmasın
+      }
+    }
+    setScanProgress(null);
+    await loadStoredKeywords();
+    await loadSuggestions();
+  };
+
+  const openInExplorer = (term: string) => {
+    setSearchTerm(term);
+    setActiveTab('explorer');
+    handleAnalyze(term);
   };
 
   const loadCategoryTopCharts = async (
@@ -236,6 +309,20 @@ export default function Dashboard() {
           </button>
           <button
             onClick={() => {
+              setActiveTab('suggestions');
+              loadSuggestions();
+            }}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-all ${
+              activeTab === 'suggestions'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Lightbulb className="h-4 w-4" />
+            Fırsat Önerileri
+          </button>
+          <button
+            onClick={() => {
               setActiveTab('rising');
               loadRisingStars();
             }}
@@ -271,6 +358,9 @@ export default function Dashboard() {
               setStorefront(newSf);
               if (activeTab === 'categories') {
                 loadCategoryTopCharts(selectedCategory, selectedChartType, newSf);
+              }
+              if (activeTab === 'suggestions') {
+                loadSuggestions(newSf);
               }
             }}
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 focus:border-blue-500 focus:outline-none"
@@ -502,14 +592,34 @@ export default function Dashboard() {
 
         {/* ================= TAB 2: KATEGORİ SIRALAMALARI (YENİ - 200'E KADAR) ================= */}
         {activeTab === 'categories' && (() => {
-          const filteredCategoryApps = categoryApps.filter((app: any) => {
-            if (!categorySearchQuery.trim()) return true;
-            const q = categorySearchQuery.toLowerCase();
-            return (
-              app.name?.toLowerCase().includes(q) ||
-              app.sellerName?.toLowerCase().includes(q)
-            );
-          });
+          const DAY_MS = 1000 * 60 * 60 * 24;
+          // Yayın tarihi bilinmeyen (epoch) kayıtlar zaman filtresine dahil edilmez
+          const releaseTime = (app: any): number => new Date(app.releaseDate).getTime();
+          const hasReleaseDate = (app: any): boolean => releaseTime(app) > 0;
+
+          const filteredCategoryApps = categoryApps
+            .filter((app: any) => {
+              if (ageFilterDays !== null) {
+                if (!hasReleaseDate(app)) return false;
+                if ((Date.now() - releaseTime(app)) / DAY_MS > ageFilterDays) return false;
+              }
+              if (!categorySearchQuery.trim()) return true;
+              const q = categorySearchQuery.toLowerCase();
+              return (
+                app.name?.toLowerCase().includes(q) ||
+                app.sellerName?.toLowerCase().includes(q)
+              );
+            })
+            .sort((a: any, b: any) => {
+              if (categorySort === 'newest') return releaseTime(b) - releaseTime(a);
+              if (categorySort === 'oldest') {
+                // Tarihi bilinmeyenler en sona
+                const ta = hasReleaseDate(a) ? releaseTime(a) : Infinity;
+                const tb = hasReleaseDate(b) ? releaseTime(b) : Infinity;
+                return ta === tb ? 0 : ta - tb;
+              }
+              return a.rank - b.rank;
+            });
 
           return (
             <div className="mx-auto max-w-7xl space-y-6">
@@ -601,6 +711,46 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                {/* Zamana Göre Filtre & Sıralama */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                    <span className="shrink-0 text-xs font-medium text-slate-400">📅 Yayın Tarihi:</span>
+                    {[
+                      { label: 'Tümü', days: null },
+                      { label: 'Son 30 Gün', days: 30 },
+                      { label: 'Son 3 Ay', days: 90 },
+                      { label: 'Son 6 Ay', days: 180 },
+                      { label: 'Son 1 Yıl', days: 365 },
+                      { label: 'Son 2 Yıl', days: 730 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.label}
+                        onClick={() => setAgeFilterDays(opt.days)}
+                        className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                          ageFilterDays === opt.days
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                            : 'border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-400">Sırala:</span>
+                    <select
+                      value={categorySort}
+                      onChange={(e) => setCategorySort(e.target.value as 'rank' | 'newest' | 'oldest')}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="rank">Mağaza Sırası</option>
+                      <option value="newest">En Yeni Önce</option>
+                      <option value="oldest">En Eski Önce</option>
+                    </select>
+                  </div>
+                </div>
+
                 {/* Kategori Seçim Butonları (Yatay Kaydırma) */}
                 <div className="flex gap-2 overflow-x-auto pb-2 pt-1 scrollbar-thin">
                   {APP_CATEGORIES.map((cat: AppCategory) => (
@@ -611,7 +761,8 @@ export default function Dashboard() {
                         loadCategoryTopCharts(cat.id, selectedChartType, storefront, selectedLimit);
                       }}
                       className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
-                        selectedCategory === cat.id
+                        selectedCategory === cat.id ||
+                        (cat.id === GAMES_CATEGORY_ID && isGameSubcategory(selectedCategory))
                           ? 'border border-blue-500 bg-blue-600/20 text-blue-300 shadow-sm'
                           : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
                       }`}
@@ -621,6 +772,37 @@ export default function Dashboard() {
                     </button>
                   ))}
                 </div>
+
+                {/* Oyunlar Alt Kategorileri */}
+                {(selectedCategory === GAMES_CATEGORY_ID || isGameSubcategory(selectedCategory)) && (
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-3">
+                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      🎮 Oyun Türleri
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: GAMES_CATEGORY_ID, nameTr: 'Tüm Oyunlar', icon: '🎮' } as AppCategory,
+                        ...GAME_SUBCATEGORIES,
+                      ].map((sub: AppCategory) => (
+                        <button
+                          key={sub.id}
+                          onClick={() => {
+                            setSelectedCategory(sub.id);
+                            loadCategoryTopCharts(sub.id, selectedChartType, storefront, selectedLimit);
+                          }}
+                          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                            selectedCategory === sub.id
+                              ? 'border border-emerald-500 bg-emerald-600/20 text-emerald-300'
+                              : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{sub.icon}</span>
+                          <span>{sub.nameTr}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {categoryLoading ? (
@@ -642,13 +824,14 @@ export default function Dashboard() {
                         <th className="py-3 px-4">Uygulama Adı</th>
                         <th className="py-3 px-4">Geliştirici</th>
                         <th className="py-3 px-4">Puan &amp; Yorum</th>
-                        <th className="py-3 px-4">Uygulama Yaşı</th>
+                        <th className="py-3 px-4">Yayın Tarihi / Yaş</th>
                         <th className="py-3 px-4">Monetizasyon</th>
                         <th className="py-3 px-4 text-right">İşlem</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 text-slate-300">
                       {filteredCategoryApps.map((app: any) => {
+                        const knownDate = new Date(app.releaseDate).getTime() > 0;
                         const ageDays = Math.round(
                           (Date.now() - new Date(app.releaseDate).getTime()) / (1000 * 60 * 60 * 24)
                         );
@@ -679,7 +862,18 @@ export default function Dashboard() {
                               </div>
                             </td>
                             <td className="py-3.5 px-4 text-slate-400">
-                              {ageYears} yıl ({ageDays} gün)
+                              {knownDate ? (
+                                <>
+                                  <span className="block text-slate-300">
+                                    {new Date(app.releaseDate).toLocaleDateString('tr-TR')}
+                                  </span>
+                                  <span className="text-[11px] text-slate-500">
+                                    {ageYears} yıl ({ageDays} gün)
+                                  </span>
+                                </>
+                              ) : (
+                                '-'
+                              )}
                             </td>
                             <td className="py-3.5 px-4">
                               {app.hasIap ? (
@@ -792,6 +986,241 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ================= TAB: FIRSAT ÖNERİLERİ ================= */}
+        {activeTab === 'suggestions' && (
+          <div className="mx-auto max-w-7xl space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-amber-400" />
+                  Fırsat Önerileri
+                </h2>
+                <p className="text-xs text-slate-400">
+                  En yüksek fırsat skorlu kelimelerinizden türetilen, henüz denenmemiş yeni keyword adayları
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customSeed}
+                  onChange={(e) => setCustomSeed(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadSuggestions()}
+                  placeholder="İsteğe bağlı tohum kelime (örn: meditation)"
+                  className="w-64 rounded-xl border border-slate-800 bg-[#0f172a] px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => loadSuggestions()}
+                  disabled={suggestLoading}
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-blue-600/30 transition-all hover:bg-blue-500 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${suggestLoading ? 'animate-spin' : ''}`} />
+                  {customSeed.trim() ? 'Bu Kelimeden Öner' : 'Önerileri Yenile'}
+                </button>
+              </div>
+            </div>
+
+            {suggestError && (
+              <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                <span>{suggestError}</span>
+              </div>
+            )}
+
+            {!suggestions && !suggestLoading && !suggestError && (
+              <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-12 text-center text-slate-400">
+                <Lightbulb className="mx-auto h-12 w-12 text-slate-600 mb-3" />
+                <p className="text-xs text-slate-500">
+                  Öneriler yalnızca masaüstü uygulamasında (Electron) çalışır. <code>npm run dev</code> ile açın.
+                </p>
+              </div>
+            )}
+
+            {suggestLoading && !suggestions && (
+              <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-16 text-center text-slate-400">
+                <RefreshCw className="mx-auto h-8 w-8 animate-spin text-blue-500 mb-3" />
+                <p className="text-sm font-semibold text-slate-300">Öneriler hazırlanıyor...</p>
+                <p className="text-xs text-slate-500 mt-1">Apple arama önerileri taranıyor</p>
+              </div>
+            )}
+
+            {suggestions && (
+              <>
+                {/* Baz Alınan Tohumlar */}
+                {suggestions.seeds.length > 0 ? (
+                  <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] p-5">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-blue-400" />
+                      Baz Alınan Güçlü Kelimeler
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.seeds.map((s: any) => (
+                        <span
+                          key={s.term}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300"
+                        >
+                          <span className="font-semibold text-white">{s.term}</span>
+                          <span className="rounded-full bg-emerald-500/10 px-1.5 text-[10px] font-mono text-emerald-400">
+                            {s.opportunity}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-10 text-center text-slate-400">
+                    <Lightbulb className="mx-auto h-10 w-10 text-slate-600 mb-3" />
+                    <h3 className="text-base font-bold text-slate-300">Henüz Baz Alınacak Kelime Yok</h3>
+                    <p className="mt-1 text-xs text-slate-500 max-w-md mx-auto">
+                      Yukarıya bir tohum kelime yazıp öneri alabilir ya da Keyword Explorer'dan birkaç kelime analiz edebilirsiniz.
+                    </p>
+                  </div>
+                )}
+
+                {/* Doğrulanmış Fırsatlar */}
+                {suggestions.verified.length > 0 && (
+                  <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] overflow-hidden">
+                    <div className="border-b border-slate-800/80 px-6 py-4">
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                        Doğrulanmış Fırsatlar ({suggestions.verified.length})
+                      </h3>
+                      <p className="text-xs text-slate-400">Analizi yapılmış, fırsat skoru ≥ 30 veya hedef bölgedeki kelimeler</p>
+                    </div>
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Anahtar Kelime</th>
+                          <th className="py-3 px-4">Hacim</th>
+                          <th className="py-3 px-4">Zorluk (KD)</th>
+                          <th className="py-3 px-4">Fırsat Skoru</th>
+                          <th className="py-3 px-4">Seviye</th>
+                          <th className="py-3 px-4 text-right">İşlem</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                        {suggestions.verified.map((v: any) => (
+                          <tr key={v.term} className="hover:bg-slate-800/30">
+                            <td className="py-3 px-4 font-semibold text-white">
+                              {v.term}
+                              {v.inTargetZone && (
+                                <span className="ml-2 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
+                                  Girilebilir
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-blue-400">{v.popularity}/100</td>
+                            <td className="py-3 px-4 font-mono font-bold text-amber-400">{v.difficulty}/100</td>
+                            <td className="py-3 px-4 font-mono font-bold text-emerald-400">{v.opportunity}/100</td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                  v.tier === 'gold'
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {v.tier}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => openInExplorer(v.term)}
+                                className="text-xs text-blue-400 hover:text-blue-300 font-semibold"
+                              >
+                                Detaya Git →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Yeni Adaylar */}
+                {suggestions.candidates.length > 0 && (
+                  <div className="rounded-2xl border border-slate-800/80 bg-[#0f172a] overflow-hidden">
+                    <div className="flex flex-col gap-3 border-b border-slate-800/80 px-6 py-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-amber-400" />
+                          Yeni Keyword Adayları ({suggestions.candidates.length})
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Tahmini potansiyele göre sıralı. Skorlar tahmindir; kesin değer için analiz edin.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => scanTopCandidates(8)}
+                        disabled={!!scanProgress || !!analyzingTerm}
+                        className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-300 border border-amber-500/30 transition-all hover:bg-amber-500 hover:text-slate-900 disabled:opacity-50"
+                      >
+                        {scanProgress ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="h-3.5 w-3.5" />
+                        )}
+                        {scanProgress
+                          ? `Taranıyor ${scanProgress.done + 1}/${scanProgress.total}: ${scanProgress.current}`
+                          : 'İlk 8 Adayı Otomatik Analiz Et'}
+                      </button>
+                    </div>
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 uppercase text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Aday Kelime</th>
+                          <th className="py-3 px-4">Türetildiği Kelime</th>
+                          <th className="py-3 px-4">Tahmini Potansiyel</th>
+                          <th className="py-3 px-4">Neden?</th>
+                          <th className="py-3 px-4 text-right">İşlem</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                        {suggestions.candidates.map((c: any) => (
+                          <tr key={c.term} className="hover:bg-slate-800/30">
+                            <td className="py-3 px-4 font-semibold text-white">{c.term}</td>
+                            <td className="py-3 px-4 text-slate-400">{c.parentTerm}</td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-20 rounded-full bg-slate-800 overflow-hidden">
+                                  <div className="h-full rounded-full bg-amber-500" style={{ width: `${c.estimate}%` }} />
+                                </div>
+                                <span className="font-mono font-bold text-amber-400">~{c.estimate}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-[11px] text-slate-500 max-w-xs">{c.reasons.join(' • ')}</td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => analyzeCandidate(c.term)}
+                                disabled={!!analyzingTerm || !!scanProgress}
+                                className="inline-flex items-center gap-1 rounded-lg bg-blue-600/10 px-2.5 py-1 text-xs font-semibold text-blue-400 border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50"
+                              >
+                                {analyzingTerm === c.term ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Search className="h-3 w-3" />
+                                )}
+                                Analiz Et
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {suggestions.seeds.length > 0 && suggestions.candidates.length === 0 && (
+                  <div className="rounded-2xl border border-slate-800 bg-[#0f172a] p-8 text-center text-xs text-slate-500">
+                    Yeni aday bulunamadı: türetilen tüm kelimeler zaten analiz edilmiş. Farklı bir tohum kelime deneyin.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

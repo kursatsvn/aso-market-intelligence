@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 export interface ElectronApi {
-  analyzeKeyword: (term: string, storefront?: string) => Promise<any>;
+  analyzeKeyword: (term: string, storefront?: string, pullReviews?: boolean) => Promise<any>;
+  getOpportunitySuggestions: (storefront?: string, seed?: string) => Promise<any>;
   getStoredKeywords: () => Promise<any[]>;
   getStoredApps: () => Promise<any[]>;
   getRisingStars: () => Promise<any[]>;
@@ -10,7 +11,10 @@ export interface ElectronApi {
 }
 
 const api: ElectronApi = {
-  analyzeKeyword: (term: string, storefront = 'us') => ipcRenderer.invoke('keyword:analyze', term, storefront),
+  analyzeKeyword: (term: string, storefront = 'us', pullReviews = true) =>
+    ipcRenderer.invoke('keyword:analyze', term, storefront, pullReviews),
+  getOpportunitySuggestions: (storefront = 'us', seed?: string) =>
+    ipcRenderer.invoke('keyword:suggest-opportunities', storefront, seed),
   getStoredKeywords: () => ipcRenderer.invoke('keyword:list'),
   getStoredApps: () => ipcRenderer.invoke('app:list'),
   getRisingStars: () => ipcRenderer.invoke('app:rising-stars'),

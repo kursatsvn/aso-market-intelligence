@@ -24,6 +24,33 @@ export const APP_CATEGORIES: AppCategory[] = [
   { id: 6014, name: 'Games', nameTr: 'Oyunlar', icon: '🎮' },
 ];
 
+/** Oyunlar ana kategorisinin ID'si */
+export const GAMES_CATEGORY_ID = 6014;
+
+/**
+ * Oyunlar alt kategorileri (Apple genre ID'leri, canlı olarak doğrulanmıştır).
+ */
+export const GAME_SUBCATEGORIES: AppCategory[] = [
+  { id: 7001, name: 'Action', nameTr: 'Aksiyon', icon: '💥' },
+  { id: 7002, name: 'Adventure', nameTr: 'Macera', icon: '🗺️' },
+  { id: 7003, name: 'Casual', nameTr: 'Basit / Hafif', icon: '🎈' },
+  { id: 7004, name: 'Board', nameTr: 'Masa Oyunu', icon: '🎲' },
+  { id: 7005, name: 'Card', nameTr: 'Kart', icon: '🃏' },
+  { id: 7006, name: 'Casino', nameTr: 'Casino', icon: '🎰' },
+  { id: 7009, name: 'Family', nameTr: 'Aile', icon: '👨‍👩‍👧' },
+  { id: 7011, name: 'Music', nameTr: 'Müzik', icon: '🎶' },
+  { id: 7012, name: 'Puzzle', nameTr: 'Bulmaca', icon: '🧩' },
+  { id: 7013, name: 'Racing', nameTr: 'Yarış', icon: '🏎️' },
+  { id: 7014, name: 'Role Playing', nameTr: 'Rol Yapma (RPG)', icon: '⚔️' },
+  { id: 7015, name: 'Simulation', nameTr: 'Simülasyon', icon: '🏗️' },
+  { id: 7016, name: 'Sports', nameTr: 'Spor', icon: '⚽' },
+  { id: 7017, name: 'Strategy', nameTr: 'Strateji', icon: '♟️' },
+  { id: 7018, name: 'Trivia', nameTr: 'Bilgi Yarışması', icon: '❓' },
+  { id: 7019, name: 'Word', nameTr: 'Kelime', icon: '🔤' },
+];
+
+export const isGameSubcategory = (id: number): boolean => GAME_SUBCATEGORIES.some((g) => g.id === id);
+
 export interface ChartTypeConfig {
   key: 'topfreeapplications' | 'topgrossingapplications' | 'toppaidapplications';
   label: string;

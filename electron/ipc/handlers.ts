@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { getPrisma } from '../db/prisma.js';
 import { analyzeKeyword } from '../services/keywordPipeline.js';
+import { getOpportunitySuggestions } from '../services/opportunitySuggestions.js';
 import { calculateRisingStar } from '../../scoring/risingStar.js';
 import { extractNGrams, categorizeReview } from '../../text/ngram.js';
 import { fetchAppReviews } from '../clients/reviews.js';
@@ -9,10 +10,20 @@ export function registerIpcHandlers(): void {
   const prisma = getPrisma();
 
   // 1. Keyword Analiz
-  ipcMain.handle('keyword:analyze', async (_, term: string, storefront = 'us') => {
+  ipcMain.handle('keyword:analyze', async (_, term: string, storefront = 'us', pullReviews = true) => {
     try {
-      const result = await analyzeKeyword(term, storefront, true);
+      const result = await analyzeKeyword(term, storefront, pullReviews);
       return { success: true, data: result };
+    } catch (err: any) {
+      return { success: false, error: err.message || String(err) };
+    }
+  });
+
+  // 1b. Fırsatlara Göre Keyword Önerileri
+  ipcMain.handle('keyword:suggest-opportunities', async (_, storefront = 'us', seed?: string) => {
+    try {
+      const data = await getOpportunitySuggestions(storefront, seed);
+      return { success: true, data };
     } catch (err: any) {
       return { success: false, error: err.message || String(err) };
     }

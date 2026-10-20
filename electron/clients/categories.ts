@@ -2,6 +2,7 @@ import { lookupApps } from './itunes.js';
 import { checkAppIap } from './webScraper.js';
 import { getPrisma } from '../db/prisma.js';
 import { getStorefrontHeader } from '../../shared/storefronts.js';
+import { GAMES_CATEGORY_ID, isGameSubcategory } from '../../shared/categories.js';
 
 export interface CategoryAppItem {
   rank: number;
@@ -77,7 +78,7 @@ async function fetchCategoryTopChartsFromMZStore(
     const price = it.offers?.[0]?.price ?? 0;
     const currency = it.offers?.[0]?.priceFormatted || (storefront === 'tr' ? 'TRY' : 'USD');
     const hasIap = !!it.hasInAppPurchases;
-    const relDate = it.releaseDate ? new Date(it.releaseDate) : new Date();
+    const relDate = it.releaseDate ? new Date(it.releaseDate) : new Date(0); // bilinmiyor
 
     items.push({
       rank,
@@ -215,7 +216,7 @@ async function saveTopChartsToDatabase(items: CategoryAppItem[], genreId: number
           id: item.id,
           name: item.name,
           sellerName: item.sellerName,
-          primaryGenreId: genreId > 0 ? genreId : 6000,
+          primaryGenreId: isGameSubcategory(genreId) ? GAMES_CATEGORY_ID : genreId > 0 ? genreId : 6000,
           releaseDate: item.releaseDate,
           lastUpdated: item.lastUpdated,
           price: item.price,
