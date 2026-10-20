@@ -3,6 +3,7 @@ import { checkAppIap } from './webScraper.js';
 import { getPrisma } from '../db/prisma.js';
 import { getStorefrontHeader } from '../../shared/storefronts.js';
 import { GAMES_CATEGORY_ID, isGameSubcategory } from '../../shared/categories.js';
+import { estimateIosInstalls } from '../../shared/platforms.js';
 
 export interface CategoryAppItem {
   rank: number;
@@ -12,6 +13,8 @@ export interface CategoryAppItem {
   iconUrl: string;
   averageRating: number;
   ratingCount: number;
+  installs?: string;
+  minInstalls?: number;
   price: number;
   currency: string;
   hasIap: boolean;
@@ -80,6 +83,9 @@ async function fetchCategoryTopChartsFromMZStore(
     const hasIap = !!it.hasInAppPurchases;
     const relDate = it.releaseDate ? new Date(it.releaseDate) : new Date(0); // bilinmiyor
 
+    const ratingCount = it.userRating?.ratingCount ?? 0;
+    const est = estimateIosInstalls(ratingCount);
+
     items.push({
       rank,
       id,
@@ -87,7 +93,9 @@ async function fetchCategoryTopChartsFromMZStore(
       sellerName: it.artistName || '',
       iconUrl,
       averageRating: Number((it.userRating?.value ?? 0).toFixed(1)),
-      ratingCount: it.userRating?.ratingCount ?? 0,
+      ratingCount,
+      installs: est.formatted,
+      minInstalls: est.minInstalls,
       price,
       currency,
       hasIap,
@@ -152,6 +160,7 @@ async function fetchCategoryTopChartsFromRss(
     const appRank = rankMap.get(id) || 0;
     if (!meta) continue;
 
+    const est = estimateIosInstalls(meta.ratingCount);
     items.push({
       rank: appRank,
       id,
@@ -160,6 +169,8 @@ async function fetchCategoryTopChartsFromRss(
       iconUrl: meta.iconUrl,
       averageRating: meta.averageRating,
       ratingCount: meta.ratingCount,
+      installs: est.formatted,
+      minInstalls: est.minInstalls,
       price: meta.price,
       currency: meta.currency,
       hasIap: false,
@@ -210,6 +221,8 @@ async function saveTopChartsToDatabase(items: CategoryAppItem[], genreId: number
           name: item.name,
           averageRating: item.averageRating,
           ratingCount: item.ratingCount,
+          installs: item.installs,
+          minInstalls: item.minInstalls,
           hasIap: item.hasIap,
         },
         create: {
@@ -223,6 +236,8 @@ async function saveTopChartsToDatabase(items: CategoryAppItem[], genreId: number
           currency: item.currency,
           averageRating: item.averageRating,
           ratingCount: item.ratingCount,
+          installs: item.installs,
+          minInstalls: item.minInstalls,
           iconUrl: item.iconUrl,
           hasIap: item.hasIap,
         },

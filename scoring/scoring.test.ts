@@ -4,6 +4,7 @@ import { calculateOpportunityScore } from './opportunity.js';
 import { calculateRisingStar } from './risingStar.js';
 import { extractNGrams, categorizeReview } from '../text/ngram.js';
 import { calculateProxyPopularity } from '../electron/clients/popularity.js';
+import { estimateIosInstalls } from '../shared/platforms.js';
 
 describe('Keyword Difficulty (KD)', () => {
   it('titleMatchScore identifies exact match', () => {
@@ -120,5 +121,29 @@ describe('Popularity Proxy', () => {
 
     const popLow = calculateProxyPopularity(null, 50); // Not in hints + few reviews
     expect(popLow).toBeLessThanOrEqual(15);
+  });
+});
+
+describe('iOS Installs Estimator', () => {
+  it('handles 0 or undefined ratingCount gracefully', () => {
+    expect(estimateIosInstalls(0).formatted).toBe('< 500 (Tahmini)');
+    expect(estimateIosInstalls(-5).formatted).toBe('< 500 (Tahmini)');
+  });
+
+  it('calculates accurate estimates across scales', () => {
+    const small = estimateIosInstalls(100); // 100 * 35 = 3500
+    expect(small.formatted).toBe('~3.5K+ (Tahmini)');
+    expect(small.minInstalls).toBe(3500);
+
+    const medium = estimateIosInstalls(5000); // 5000 * 45 = 225,000
+    expect(medium.formatted).toBe('~225K+ (Tahmini)');
+    expect(medium.minInstalls).toBe(225000);
+
+    const large = estimateIosInstalls(50000); // 50000 * 60 = 3,000,000
+    expect(large.formatted).toBe('~3.0M+ (Tahmini)');
+    expect(large.minInstalls).toBe(3000000);
+
+    const huge = estimateIosInstalls(20000000); // 20M * 75 = 1.5B
+    expect(huge.formatted).toContain('B+ (Tahmini)');
   });
 });

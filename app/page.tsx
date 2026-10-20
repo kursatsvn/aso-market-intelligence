@@ -30,7 +30,7 @@ import {
   type AppCategory,
   type GPlayCategory,
 } from '../shared/categories';
-import { PLATFORMS, type Platform } from '../shared/platforms';
+import { PLATFORMS, type Platform, estimateIosInstalls } from '../shared/platforms';
 
 interface ElectronApi {
   analyzeKeyword: (term: string, storefront?: string, platform?: string | boolean, pullReviews?: boolean) => Promise<any>;
@@ -629,6 +629,11 @@ export default function Dashboard() {
                                     ({app.ratingCount.toLocaleString()} yorum)
                                   </span>
                                 </div>
+                                {(app.installs || (app.ratingCount > 0 ? estimateIosInstalls(app.ratingCount).formatted : undefined)) && (
+                                  <span className="mt-0.5 inline-block text-[10px] text-emerald-400 font-medium">
+                                    ⬇️ {app.installs || estimateIosInstalls(app.ratingCount).formatted} indirme
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-slate-400">
                                 {ageYears} yıl ({ageDays} gün)
@@ -989,9 +994,9 @@ export default function Dashboard() {
                                   ({app.ratingCount.toLocaleString()} yorum)
                                 </span>
                               </div>
-                              {app.installs && (
+                              {(app.installs || (app.ratingCount > 0 ? estimateIosInstalls(app.ratingCount).formatted : undefined)) && (
                                 <span className="mt-0.5 inline-block text-[10px] text-emerald-400 font-medium">
-                                  ⬇️ {app.installs} indirme
+                                  ⬇️ {app.installs || estimateIosInstalls(app.ratingCount).formatted} indirme
                                 </span>
                               )}
                             </td>

@@ -11,7 +11,7 @@ import { fetchGPlayReviews } from '../clients/gplay/reviews.js';
 import { calculateKeywordDifficulty, type SerpAppScoringInput } from '../../scoring/difficulty.js';
 import { calculateOpportunityScore, type OpportunityResult } from '../../scoring/opportunity.js';
 import { extractNGrams, categorizeReview, type NGramFreq } from '../../text/ngram.js';
-import type { Platform } from '../../shared/platforms.js';
+import { type Platform, estimateIosInstalls } from '../../shared/platforms.js';
 
 export interface KeywordPipelineResult {
   keyword: string;
@@ -131,12 +131,14 @@ export async function analyzeKeyword(
         lastUpdated: meta.lastUpdated,
       });
 
+      const est = estimateIosInstalls(meta.ratingCount);
       topAppsResult.push({
         rank: s.rank,
         id: s.appId,
         name: meta.name,
         averageRating: meta.averageRating,
         ratingCount: meta.ratingCount,
+        installs: est.formatted,
         hasIap,
         releaseDate: meta.releaseDate,
         lastUpdated: meta.lastUpdated,
@@ -150,6 +152,8 @@ export async function analyzeKeyword(
           platform: 'ios',
           averageRating: meta.averageRating,
           ratingCount: meta.ratingCount,
+          installs: est.formatted,
+          minInstalls: est.minInstalls,
           hasIap,
           lastUpdated: meta.lastUpdated,
         },
@@ -167,6 +171,8 @@ export async function analyzeKeyword(
           currency: meta.currency,
           averageRating: meta.averageRating,
           ratingCount: meta.ratingCount,
+          installs: est.formatted,
+          minInstalls: est.minInstalls,
           iconUrl: meta.iconUrl,
           hasIap,
         },
