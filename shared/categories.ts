@@ -86,12 +86,36 @@ export const GPLAY_CATEGORIES: GPlayCategory[] = [
   { id: 'MUSIC_AND_AUDIO', name: 'Music & Audio', nameTr: 'Müzik ve Ses', icon: '🎵' },
   { id: 'SHOPPING', name: 'Shopping', nameTr: 'Alışveriş', icon: '🛍️' },
   { id: 'TRAVEL_AND_LOCAL', name: 'Travel & Local', nameTr: 'Seyahat', icon: '✈️' },
-  { id: 'GAME', name: 'Games (All)', nameTr: 'Tüm Oyunlar', icon: '🎮' },
-  { id: 'GAME_ACTION', name: 'Action', nameTr: 'Aksiyon Oyunu', icon: '💥' },
-  { id: 'GAME_CASUAL', name: 'Casual', nameTr: 'Basit Eğlence', icon: '🎈' },
-  { id: 'GAME_PUZZLE', name: 'Puzzle', nameTr: 'Bulmaca Oyunu', icon: '🧩' },
-  { id: 'GAME_STRATEGY', name: 'Strategy', nameTr: 'Strateji Oyunu', icon: '♟️' },
-  { id: 'GAME_SIMULATION', name: 'Simulation', nameTr: 'Simülasyon Oyunu', icon: '🏗️' },
-  { id: 'GAME_ROLE_PLAYING', name: 'Role Playing', nameTr: 'Rol Yapma (RPG)', icon: '⚔️' },
+  { id: 'GAME', name: 'Games', nameTr: 'Oyunlar', icon: '🎮' },
 ];
+
+/** Google Play Oyunlar ana kategorisinin ID'si */
+export const GPLAY_GAME_CATEGORY_ID = 'GAME';
+
+/**
+ * Google Play Oyun alt kategorileri
+ */
+export const GPLAY_GAME_SUBCATEGORIES: GPlayCategory[] = [
+  { id: 'GAME_ACTION', name: 'Action', nameTr: 'Aksiyon', icon: '💥' },
+  { id: 'GAME_ADVENTURE', name: 'Adventure', nameTr: 'Macera', icon: '🗺️' },
+  { id: 'GAME_ARCADE', name: 'Arcade', nameTr: 'Arcade', icon: '🕹️' },
+  { id: 'GAME_BOARD', name: 'Board', nameTr: 'Masa Oyunu', icon: '🎲' },
+  { id: 'GAME_CARD', name: 'Card', nameTr: 'Kart Oyunu', icon: '🃏' },
+  { id: 'GAME_CASINO', name: 'Casino', nameTr: 'Casino', icon: '🎰' },
+  { id: 'GAME_CASUAL', name: 'Casual', nameTr: 'Basit Eğlence', icon: '🎈' },
+  { id: 'GAME_EDUCATIONAL', name: 'Educational', nameTr: 'Eğitici', icon: '📚' },
+  { id: 'GAME_MUSIC', name: 'Music', nameTr: 'Müzik', icon: '🎶' },
+  { id: 'GAME_PUZZLE', name: 'Puzzle', nameTr: 'Bulmaca', icon: '🧩' },
+  { id: 'GAME_RACING', name: 'Racing', nameTr: 'Yarış', icon: '🏎️' },
+  { id: 'GAME_ROLE_PLAYING', name: 'Role Playing', nameTr: 'Rol Yapma (RPG)', icon: '⚔️' },
+  { id: 'GAME_SIMULATION', name: 'Simulation', nameTr: 'Simülasyon', icon: '🏗️' },
+  { id: 'GAME_SPORTS', name: 'Sports', nameTr: 'Spor', icon: '⚽' },
+  { id: 'GAME_STRATEGY', name: 'Strategy', nameTr: 'Strateji', icon: '♟️' },
+  { id: 'GAME_TRIVIA', name: 'Trivia', nameTr: 'Bilgi Yarışması', icon: '❓' },
+  { id: 'GAME_WORD', name: 'Word', nameTr: 'Kelime', icon: '🔤' },
+];
+
+export const isGPlayGameSubcategory = (id: string | number): boolean =>
+  typeof id === 'string' && GPLAY_GAME_SUBCATEGORIES.some((g) => g.id === id);
+
 

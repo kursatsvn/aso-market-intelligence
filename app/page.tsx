@@ -23,7 +23,10 @@ import {
   GAMES_CATEGORY_ID,
   GAME_SUBCATEGORIES,
   GPLAY_CATEGORIES,
+  GPLAY_GAME_CATEGORY_ID,
+  GPLAY_GAME_SUBCATEGORIES,
   isGameSubcategory,
+  isGPlayGameSubcategory,
   type AppCategory,
   type GPlayCategory,
 } from '../shared/categories';
@@ -687,11 +690,11 @@ export default function Dashboard() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5 text-blue-400" />
-                      Kategoriye Göre App Store Sıralamaları (Top Charts)
+                      <BarChart3 className={`h-5 w-5 ${platform === 'android' ? 'text-emerald-400' : 'text-blue-400'}`} />
+                      Kategoriye Göre {platform === 'android' ? 'Google Play' : 'App Store'} Sıralamaları (Top Charts)
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Herhangi bir anahtar kelime girmeden doğrudan mağaza kategorilerindeki lider uygulamaları (200'e kadar) inceleyin
+                      Herhangi bir anahtar kelime girmeden doğrudan mağaza kategorilerindeki lider uygulamaları inceleyin
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -822,7 +825,8 @@ export default function Dashboard() {
                           loadCategoryTopCharts(cat.id, selectedChartType, storefront, selectedLimit, 'android');
                         }}
                         className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-medium transition-all ${
-                          selectedCategory === cat.id
+                          selectedCategory === cat.id ||
+                          (cat.id === GPLAY_GAME_CATEGORY_ID && isGPlayGameSubcategory(selectedCategory))
                             ? 'border border-emerald-500 bg-emerald-600/20 text-emerald-300 shadow-sm'
                             : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
                         }`}
@@ -853,11 +857,11 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Oyunlar Alt Kategorileri (Yalnızca iOS için) */}
+                {/* Oyunlar Alt Kategorileri (App Store / iOS) */}
                 {platform === 'ios' && (selectedCategory === GAMES_CATEGORY_ID || (typeof selectedCategory === 'number' && isGameSubcategory(selectedCategory))) && (
                   <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-3">
                     <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      🎮 Oyun Türleri
+                      🎮 App Store Oyun Türleri
                     </span>
                     <div className="flex flex-wrap gap-2">
                       {[
@@ -869,6 +873,37 @@ export default function Dashboard() {
                           onClick={() => {
                             setSelectedCategory(sub.id);
                             loadCategoryTopCharts(sub.id, selectedChartType, storefront, selectedLimit, 'ios');
+                          }}
+                          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                            selectedCategory === sub.id
+                              ? 'border border-blue-500 bg-blue-600/20 text-blue-300'
+                              : 'border border-slate-800 bg-[#0f172a] text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{sub.icon}</span>
+                          <span>{sub.nameTr}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Oyunlar Alt Kategorileri (Google Play / Android) */}
+                {platform === 'android' && (selectedCategory === GPLAY_GAME_CATEGORY_ID || isGPlayGameSubcategory(selectedCategory)) && (
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-3">
+                    <span className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      🎮 Google Play Oyun Türleri
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: GPLAY_GAME_CATEGORY_ID, nameTr: 'Tüm Oyunlar', icon: '🎮' } as GPlayCategory,
+                        ...GPLAY_GAME_SUBCATEGORIES,
+                      ].map((sub: GPlayCategory) => (
+                        <button
+                          key={sub.id}
+                          onClick={() => {
+                            setSelectedCategory(sub.id);
+                            loadCategoryTopCharts(sub.id, selectedChartType, storefront, selectedLimit, 'android');
                           }}
                           className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                             selectedCategory === sub.id
